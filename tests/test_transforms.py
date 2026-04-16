@@ -22,7 +22,6 @@ import pytest
 
 from src.transform.schemas import VALID_ORDER_STATUSES
 
-
 # ---------------------------------------------------------------------------
 # Helpers shared across test classes
 # ---------------------------------------------------------------------------
@@ -211,8 +210,8 @@ class TestTransformWeather:
         df = self._make_weather_df([{"weathercode": float("nan")}])
         df["weathercode"] = df["weathercode"].astype("Int64")
 
+        # pd.isna proves the value is NA — comparisons like != 0 on pd.NA raise TypeError
         assert pd.isna(df["weathercode"].iloc[0])
-        assert df["weathercode"].iloc[0] != 0
 
     def test_date_range_filter(self) -> None:
         """Rows outside the pipeline date range must be identified as out-of-range."""

@@ -44,7 +44,7 @@ logger.add(
     rotation="10 MB",
     retention="7 days",
     compression="zip",
-    enqueue=True,   # thread-safe async writes
+    enqueue=True,  # thread-safe async writes
 )
 
 __all__ = ["logger"]

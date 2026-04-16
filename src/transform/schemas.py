@@ -98,13 +98,13 @@ SilverOrderSchema = pa.DataFrameSchema(
             description="Date the order was actually delivered.",
         ),
         "delivery_days_actual": pa.Column(
-            pa.Int,
+            pd.Int64Dtype(),
             nullable=True,
             checks=pa.Check.ge(0),
             description="Number of calendar days from order to actual delivery.",
         ),
         "delivery_days_estimated": pa.Column(
-            pa.Int,
+            pd.Int64Dtype(),
             nullable=True,
             checks=pa.Check.ge(0),
             description="Number of calendar days from order to promised delivery.",
@@ -257,9 +257,7 @@ SilverWeatherSchema = pa.DataFrameSchema(
             description="Mean daily wind speed in km/h.",
         ),
         "weathercode": pa.Column(
-            # pa.Int with nullable=True and coerce=True correctly handles
-            # pandas nullable Int64 (capital-I extension dtype) in pandera >= 0.18.
-            pa.Int,
+            pd.Int64Dtype(),
             nullable=True,
             checks=[
                 pa.Check.ge(0),
@@ -392,11 +390,7 @@ def validate_silver(
                 parts.append(f"{col}[{check}]={case!r}")
             return " | ".join(parts)
 
-        reason_map: dict = (
-            row_failures.groupby("index")
-            .apply(_build_reason)
-            .to_dict()
-        )
+        reason_map: dict = row_failures.groupby("index").apply(_build_reason).to_dict()
 
         invalid_indices = set(reason_map.keys())
         valid_mask = ~df.index.isin(invalid_indices)

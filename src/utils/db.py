@@ -9,9 +9,9 @@ Both helpers read credentials from the project .env file via python-dotenv.
 """
 
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
 from urllib.parse import quote_plus
 
 import psycopg2
@@ -48,7 +48,7 @@ def _build_dsn() -> str:
     required_vars = ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD")
     missing = [v for v in required_vars if not os.getenv(v)]
     if missing:
-        raise EnvironmentError(
+        raise OSError(
             f"Missing required environment variable(s): {', '.join(missing)}. "
             f"Copy .env.example to .env and fill in your credentials."
         )
@@ -84,10 +84,12 @@ def get_engine(pool_size: int = 5, max_overflow: int = 10) -> Engine:
         dsn,
         pool_size=pool_size,
         max_overflow=max_overflow,
-        pool_pre_ping=True,   # validate connections before use
+        pool_pre_ping=True,  # validate connections before use
         echo=False,
     )
-    logger.debug("SQLAlchemy engine created (pool_size={}, max_overflow={})", pool_size, max_overflow)
+    logger.debug(
+        "SQLAlchemy engine created (pool_size={}, max_overflow={})", pool_size, max_overflow
+    )
     return engine
 
 
@@ -112,7 +114,7 @@ def get_connection() -> Generator[psycopg2.extensions.connection, None, None]:
     required_vars = ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD")
     missing = [v for v in required_vars if not os.getenv(v)]
     if missing:
-        raise EnvironmentError(
+        raise OSError(
             f"Missing required environment variable(s): {', '.join(missing)}. "
             "Copy .env.example to .env and fill in your credentials."
         )
@@ -202,14 +204,14 @@ def get_pipeline_config() -> dict[str, str]:
       - log_level        : logging level string
     """
     return {
-        "weather_provider":       os.getenv("WEATHER_PROVIDER", "open-meteo"),
-        "fx_provider":            os.getenv("FX_PROVIDER", "frankfurter"),
-        "start_date":             os.getenv("PIPELINE_START_DATE", "2016-09-01"),
-        "end_date":               os.getenv("PIPELINE_END_DATE", "2018-10-31"),
-        "weather_city_count":     int(os.getenv("WEATHER_CITY_COUNT", "20")),
-        "fx_base_currency":       os.getenv("FX_BASE_CURRENCY", "USD"),
-        "fx_quote_currency":      os.getenv("FX_QUOTE_CURRENCY", "BRL"),
-        "log_level":              os.getenv("LOG_LEVEL", "INFO"),
+        "weather_provider": os.getenv("WEATHER_PROVIDER", "open-meteo"),
+        "fx_provider": os.getenv("FX_PROVIDER", "frankfurter"),
+        "start_date": os.getenv("PIPELINE_START_DATE", "2016-09-01"),
+        "end_date": os.getenv("PIPELINE_END_DATE", "2018-10-31"),
+        "weather_city_count": int(os.getenv("WEATHER_CITY_COUNT", "20")),
+        "fx_base_currency": os.getenv("FX_BASE_CURRENCY", "USD"),
+        "fx_quote_currency": os.getenv("FX_QUOTE_CURRENCY", "BRL"),
+        "log_level": os.getenv("LOG_LEVEL", "INFO"),
     }
 
 

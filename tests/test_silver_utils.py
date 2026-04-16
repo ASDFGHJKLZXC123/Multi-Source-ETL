@@ -36,7 +36,6 @@ from src.transform.utils import (
     write_silver,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -44,9 +43,7 @@ from src.transform.utils import (
 
 def _make_simple_df(n: int = 3) -> pd.DataFrame:
     """Return a trivial n-row DataFrame suitable for write/read round-trips."""
-    return pd.DataFrame(
-        {"id": list(range(1, n + 1)), "value": [f"v{i}" for i in range(1, n + 1)]}
-    )
+    return pd.DataFrame({"id": list(range(1, n + 1)), "value": [f"v{i}" for i in range(1, n + 1)]})
 
 
 # ===========================================================================
@@ -179,9 +176,7 @@ class TestWriteSilver:
 class TestQuarantineRows:
     """Tests for ``quarantine_rows(df, reasons, transform_name) -> Path | None``."""
 
-    def test_quarantine_rows_empty_df_returns_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_quarantine_rows_empty_df_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Passing an empty DataFrame must return None without writing any file."""
         monkeypatch.setattr(utils_mod, "QUARANTINE_DIR", Path("/nonexistent/should/not/matter"))
 

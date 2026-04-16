@@ -56,32 +56,33 @@ _MAX_RETRIES = 3
 _BACKOFF_BASE_SECONDS = 2  # exponential: 2, 4, 8 seconds
 
 DEFAULT_CITIES: list[dict[str, Any]] = [
-    {"name": "sao paulo",      "state": "SP", "lat": -23.5505, "lng": -46.6333},
+    {"name": "sao paulo", "state": "SP", "lat": -23.5505, "lng": -46.6333},
     {"name": "rio de janeiro", "state": "RJ", "lat": -22.9068, "lng": -43.1729},
-    {"name": "brasilia",       "state": "DF", "lat": -15.7942, "lng": -47.8825},
-    {"name": "salvador",       "state": "BA", "lat": -12.9714, "lng": -38.5014},
-    {"name": "fortaleza",      "state": "CE", "lat":  -3.7172, "lng": -38.5434},
+    {"name": "brasilia", "state": "DF", "lat": -15.7942, "lng": -47.8825},
+    {"name": "salvador", "state": "BA", "lat": -12.9714, "lng": -38.5014},
+    {"name": "fortaleza", "state": "CE", "lat": -3.7172, "lng": -38.5434},
     {"name": "belo horizonte", "state": "MG", "lat": -19.9167, "lng": -43.9345},
-    {"name": "manaus",         "state": "AM", "lat":  -3.1190, "lng": -60.0217},
-    {"name": "curitiba",       "state": "PR", "lat": -25.4278, "lng": -49.2731},
-    {"name": "recife",         "state": "PE", "lat":  -8.0539, "lng": -34.8811},
-    {"name": "porto alegre",   "state": "RS", "lat": -30.0369, "lng": -51.2090},
-    {"name": "belem",          "state": "PA", "lat":  -1.4558, "lng": -48.5044},
-    {"name": "goiania",        "state": "GO", "lat": -16.6864, "lng": -49.2643},
-    {"name": "guarulhos",      "state": "SP", "lat": -23.4543, "lng": -46.5333},
-    {"name": "campinas",       "state": "SP", "lat": -22.9056, "lng": -47.0608},
-    {"name": "sao luis",       "state": "MA", "lat":  -2.5297, "lng": -44.3028},
-    {"name": "maceio",         "state": "AL", "lat":  -9.6658, "lng": -35.7350},
-    {"name": "natal",          "state": "RN", "lat":  -5.7945, "lng": -35.2110},
-    {"name": "teresina",       "state": "PI", "lat":  -5.0892, "lng": -42.8019},
-    {"name": "campo grande",   "state": "MS", "lat": -20.4697, "lng": -54.6201},
-    {"name": "joao pessoa",    "state": "PB", "lat":  -7.1195, "lng": -34.8450},
+    {"name": "manaus", "state": "AM", "lat": -3.1190, "lng": -60.0217},
+    {"name": "curitiba", "state": "PR", "lat": -25.4278, "lng": -49.2731},
+    {"name": "recife", "state": "PE", "lat": -8.0539, "lng": -34.8811},
+    {"name": "porto alegre", "state": "RS", "lat": -30.0369, "lng": -51.2090},
+    {"name": "belem", "state": "PA", "lat": -1.4558, "lng": -48.5044},
+    {"name": "goiania", "state": "GO", "lat": -16.6864, "lng": -49.2643},
+    {"name": "guarulhos", "state": "SP", "lat": -23.4543, "lng": -46.5333},
+    {"name": "campinas", "state": "SP", "lat": -22.9056, "lng": -47.0608},
+    {"name": "sao luis", "state": "MA", "lat": -2.5297, "lng": -44.3028},
+    {"name": "maceio", "state": "AL", "lat": -9.6658, "lng": -35.7350},
+    {"name": "natal", "state": "RN", "lat": -5.7945, "lng": -35.2110},
+    {"name": "teresina", "state": "PI", "lat": -5.0892, "lng": -42.8019},
+    {"name": "campo grande", "state": "MS", "lat": -20.4697, "lng": -54.6201},
+    {"name": "joao pessoa", "state": "PB", "lat": -7.1195, "lng": -34.8450},
 ]
 
 
 # ---------------------------------------------------------------------------
 # HTTP helpers
 # ---------------------------------------------------------------------------
+
 
 def _fetch_with_retry(url: str, params: dict[str, Any]) -> dict[str, Any]:
     """GET *url* with query *params*, retrying on transient HTTP errors.
@@ -115,33 +116,43 @@ def _fetch_with_retry(url: str, params: dict[str, Any]) -> dict[str, Any]:
         except requests.exceptions.HTTPError as exc:
             status = exc.response.status_code if exc.response is not None else "unknown"
             # Do not retry client errors (4xx) except 429 (rate limit)
-            if exc.response is not None and 400 <= exc.response.status_code < 500 and exc.response.status_code != 429:
+            if (
+                exc.response is not None
+                and 400 <= exc.response.status_code < 500
+                and exc.response.status_code != 429
+            ):
                 logger.error("Non-retryable HTTP {} error for {}", status, url)
                 raise
-            wait = _BACKOFF_BASE_SECONDS ** attempt
+            wait = _BACKOFF_BASE_SECONDS**attempt
             logger.warning(
                 "HTTP {} on attempt {}/{} — retrying in {}s",
-                status, attempt, _MAX_RETRIES, wait,
+                status,
+                attempt,
+                _MAX_RETRIES,
+                wait,
             )
             last_exc = exc
             time.sleep(wait)
         except requests.exceptions.ConnectionError as exc:
-            wait = _BACKOFF_BASE_SECONDS ** attempt
+            wait = _BACKOFF_BASE_SECONDS**attempt
             logger.warning(
                 "Connection error on attempt {}/{} — retrying in {}s: {}",
-                attempt, _MAX_RETRIES, wait, exc,
+                attempt,
+                _MAX_RETRIES,
+                wait,
+                exc,
             )
             last_exc = exc
             time.sleep(wait)
         except requests.exceptions.Timeout as exc:
-            wait = _BACKOFF_BASE_SECONDS ** attempt
-            logger.warning("Timeout on attempt {}/{} — retrying in {}s", attempt, _MAX_RETRIES, wait)
+            wait = _BACKOFF_BASE_SECONDS**attempt
+            logger.warning(
+                "Timeout on attempt {}/{} — retrying in {}s", attempt, _MAX_RETRIES, wait
+            )
             last_exc = exc
             time.sleep(wait)
 
-    raise requests.HTTPError(
-        f"All {_MAX_RETRIES} attempts failed for {url}"
-    ) from last_exc
+    raise requests.HTTPError(f"All {_MAX_RETRIES} attempts failed for {url}") from last_exc
 
 
 def _save_raw_response(city_name: str, start_date: str, payload: dict[str, Any]) -> Path:
@@ -178,6 +189,7 @@ def _save_raw_response(city_name: str, start_date: str, payload: dict[str, Any])
 # Parse API response
 # ---------------------------------------------------------------------------
 
+
 def _parse_response(payload: dict[str, Any], city: dict[str, Any]) -> pd.DataFrame:
     """Convert an Open-Meteo archive response into a tidy DataFrame.
 
@@ -200,27 +212,38 @@ def _parse_response(payload: dict[str, Any], city: dict[str, Any]) -> pd.DataFra
     if not dates:
         logger.warning("Empty daily data for city '{}'", city["name"])
         return pd.DataFrame(
-            columns=["city", "state", "date", "temp_max", "temp_min",
-                     "precipitation", "windspeed", "weathercode"]
+            columns=[
+                "city",
+                "state",
+                "date",
+                "temp_max",
+                "temp_min",
+                "precipitation",
+                "windspeed",
+                "weathercode",
+            ]
         )
 
-    df = pd.DataFrame({
-        "city":          city["name"],
-        "state":         city["state"],
-        "date":          pd.to_datetime(dates),
-        "temp_max":      daily.get("temperature_2m_max"),
-        "temp_min":      daily.get("temperature_2m_min"),
-        "precipitation": daily.get("precipitation_sum"),
-        "windspeed":     daily.get("windspeed_10m_max"),
-        # Open-Meteo uses "weather_code" (with underscore) in current API
-        "weathercode":   daily.get("weather_code"),
-    })
+    df = pd.DataFrame(
+        {
+            "city": city["name"],
+            "state": city["state"],
+            "date": pd.to_datetime(dates),
+            "temp_max": daily.get("temperature_2m_max"),
+            "temp_min": daily.get("temperature_2m_min"),
+            "precipitation": daily.get("precipitation_sum"),
+            "windspeed": daily.get("windspeed_10m_max"),
+            # Open-Meteo uses "weather_code" (with underscore) in current API
+            "weathercode": daily.get("weather_code"),
+        }
+    )
     return df
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def extract_weather(
     cities: list[dict[str, Any]],
@@ -253,7 +276,9 @@ def extract_weather(
     """
     logger.info(
         "Extracting weather data for {} cities from {} to {}",
-        len(cities), start_date, end_date,
+        len(cities),
+        start_date,
+        end_date,
     )
 
     all_frames: list[pd.DataFrame] = []
@@ -271,12 +296,12 @@ def extract_weather(
                 payload = json.load(fh)
         else:
             params: dict[str, Any] = {
-                "latitude":   city["lat"],
-                "longitude":  city["lng"],
+                "latitude": city["lat"],
+                "longitude": city["lng"],
                 "start_date": start_date,
-                "end_date":   end_date,
-                "daily":      _WEATHER_VARIABLES_PARAM,
-                "timezone":   "America/Sao_Paulo",
+                "end_date": end_date,
+                "daily": _WEATHER_VARIABLES_PARAM,
+                "timezone": "America/Sao_Paulo",
             }
             try:
                 payload = _fetch_with_retry(_API_BASE_URL, params)
@@ -288,15 +313,21 @@ def extract_weather(
         city_df = _parse_response(payload, city)
         if not city_df.empty:
             all_frames.append(city_df)
-            logger.debug(
-                "Parsed {:,} weather records for '{}'", len(city_df), city_name
-            )
+            logger.debug("Parsed {:,} weather records for '{}'", len(city_df), city_name)
 
     if not all_frames:
         logger.warning("No weather data collected — returning empty DataFrame")
         return pd.DataFrame(
-            columns=["city", "state", "date", "temp_max", "temp_min",
-                     "precipitation", "windspeed", "weathercode"]
+            columns=[
+                "city",
+                "state",
+                "date",
+                "temp_max",
+                "temp_min",
+                "precipitation",
+                "windspeed",
+                "weathercode",
+            ]
         )
 
     combined = pd.concat(all_frames, ignore_index=True)

@@ -68,10 +68,10 @@ from src.transform.gold_utils import (
 )
 from src.utils.logger import logger
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _load_dim_date() -> pd.DataFrame:
     """Return the minimal dim_date slice needed for RI checks."""
@@ -80,23 +80,17 @@ def _load_dim_date() -> pd.DataFrame:
 
 def _load_dim_customer() -> pd.DataFrame:
     """Return the customer_id → customer_key lookup slice."""
-    return pd.read_parquet(GOLD_DIMS_DIR / "dim_customer.parquet")[
-        ["customer_id", "customer_key"]
-    ]
+    return pd.read_parquet(GOLD_DIMS_DIR / "dim_customer.parquet")[["customer_id", "customer_key"]]
 
 
 def _load_dim_product() -> pd.DataFrame:
     """Return the product_id → product_key lookup slice."""
-    return pd.read_parquet(GOLD_DIMS_DIR / "dim_product.parquet")[
-        ["product_id", "product_key"]
-    ]
+    return pd.read_parquet(GOLD_DIMS_DIR / "dim_product.parquet")[["product_id", "product_key"]]
 
 
 def _load_dim_store() -> pd.DataFrame:
     """Return the store_id → store_key lookup slice."""
-    return pd.read_parquet(GOLD_DIMS_DIR / "dim_store.parquet")[
-        ["store_id", "store_key"]
-    ]
+    return pd.read_parquet(GOLD_DIMS_DIR / "dim_store.parquet")[["store_id", "store_key"]]
 
 
 def _load_dim_currency() -> pd.DataFrame:
@@ -109,6 +103,7 @@ def _load_dim_currency() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # fact_sales
 # ---------------------------------------------------------------------------
+
 
 def build_fact_sales() -> pd.DataFrame:
     """Build and write the sales fact table (grain: order line item).
@@ -141,17 +136,19 @@ def build_fact_sales() -> pd.DataFrame:
     # Join order_items to orders on the source-system FK
     # Keep only columns needed downstream to avoid accidental name collisions
     # ------------------------------------------------------------------
-    orders_slim: pd.DataFrame = orders[[
-        "order_id",
-        "order_code",
-        "customer_id",
-        "order_status",
-        "order_date",
-        "source_channel",
-        "currency_code",
-        "delivery_days_actual",
-        "delivery_days_estimated",
-    ]].copy()
+    orders_slim: pd.DataFrame = orders[
+        [
+            "order_id",
+            "order_code",
+            "customer_id",
+            "order_status",
+            "order_date",
+            "source_channel",
+            "currency_code",
+            "delivery_days_actual",
+            "delivery_days_estimated",
+        ]
+    ].copy()
 
     df: pd.DataFrame = order_items.merge(orders_slim, on="order_id", how="inner")
 
@@ -256,6 +253,7 @@ def build_fact_sales() -> pd.DataFrame:
 # fact_weather_daily
 # ---------------------------------------------------------------------------
 
+
 def build_fact_weather_daily() -> pd.DataFrame:
     """Build and write the weather daily fact table (grain: city + date).
 
@@ -319,6 +317,7 @@ def build_fact_weather_daily() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # fact_fx_rates
 # ---------------------------------------------------------------------------
+
 
 def build_fact_fx_rates() -> pd.DataFrame:
     """Build and write the FX rates fact table (grain: date + base + quote).
@@ -420,6 +419,7 @@ def build_fact_fx_rates() -> pd.DataFrame:
 # Orchestration entry point
 # ---------------------------------------------------------------------------
 
+
 def run() -> dict[str, pd.DataFrame]:
     """Build all three Gold fact tables in dependency order.
 
@@ -446,10 +446,7 @@ def run() -> dict[str, pd.DataFrame]:
     results["fact_fx_rates"] = build_fact_fx_rates()
 
     # Summary log so operators can confirm row counts at a glance.
-    summary_lines: list[str] = [
-        f"  {name}: {len(df):,} rows"
-        for name, df in results.items()
-    ]
+    summary_lines: list[str] = [f"  {name}: {len(df):,} rows" for name, df in results.items()]
     logger.info(
         "=== Stage 4 complete. Fact row counts ===\n{}",
         "\n".join(summary_lines),

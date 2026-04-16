@@ -30,8 +30,7 @@ from src.utils.logger import logger
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _BRONZE_MANUAL = _PROJECT_ROOT / "data" / "bronze" / "manual"
 _MUNICIPIOS_URL = (
-    "https://raw.githubusercontent.com/"
-    "kelvins/municipios-brasileiros/main/csv/municipios.csv"
+    "https://raw.githubusercontent.com/" "kelvins/municipios-brasileiros/main/csv/municipios.csv"
 )
 _MUNICIPIOS_PATH = _BRONZE_MANUAL / "municipios.csv"
 
@@ -39,6 +38,7 @@ _MUNICIPIOS_PATH = _BRONZE_MANUAL / "municipios.csv"
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def extract_municipios() -> pd.DataFrame:
     """Download the Brazilian municipalities reference CSV and return it as a DataFrame.

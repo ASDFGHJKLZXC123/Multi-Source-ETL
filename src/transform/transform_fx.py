@@ -29,7 +29,6 @@ import sys
 
 import pandas as pd
 
-from src.utils.logger import logger
 from src.extract.extract_fx import extract_fx_rates
 from src.transform.schemas import SilverFxSchema, validate_silver
 from src.transform.utils import (
@@ -38,6 +37,7 @@ from src.transform.utils import (
     quarantine_rows,
     write_silver,
 )
+from src.utils.logger import logger
 
 __all__ = ["transform_fx", "run"]
 
@@ -114,6 +114,11 @@ def transform_fx(
     # Capture currency values before reindexing (they're constant scalars)
     base_currency: str = df["base_currency"].iloc[0] if not df.empty else ""
     quote_currency: str = df["quote_currency"].iloc[0] if not df.empty else ""
+
+    # Deduplicate on date before indexing — reindex raises ValueError if the
+    # index contains duplicate labels.  Keep the last occurrence so that if
+    # a Bronze cache has overlapping chunks the most-recent rate wins.
+    df = df.drop_duplicates(subset=["date"], keep="last").copy()
 
     # Set date as index for reindex / fill operations
     # Name the index "date" before setting it so reset_index() produces a

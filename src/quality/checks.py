@@ -17,12 +17,10 @@ accepted by every function for API consistency but is not used internally.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 
 from src.utils.db import get_connection
 from src.utils.logger import logger
-
 
 # ---------------------------------------------------------------------------
 # Allowlist — protects every SQL f-string from table-name injection
@@ -129,7 +127,7 @@ def check_row_count(
     """
     _validate_table(table)
     name = check_name or f"{table}.row_count_threshold"
-    sql = f'SELECT COUNT(*) FROM {table}'
+    sql = f"SELECT COUNT(*) FROM {table}"
 
     logger.debug("Running check '{}' — SQL: {}", name, sql)
 
@@ -411,7 +409,7 @@ def check_referential_integrity(
     _validate_table(dim_table)
     name = check_name or f"{fact_table}.ri.{fk_column}->{dim_table}.{pk_column}"
     sql = (
-        f'SELECT COUNT(*) FROM {fact_table} f '
+        f"SELECT COUNT(*) FROM {fact_table} f "
         f'LEFT JOIN {dim_table} d ON f."{fk_column}" = d."{pk_column}" '
         f'WHERE d."{pk_column}" IS NULL AND f."{fk_column}" IS NOT NULL'
     )
@@ -483,7 +481,7 @@ def check_column_gt_column(
     _validate_table(table)
     name = check_name or f"{table}.col_order.{col_a}>={col_b}"
     sql = (
-        f'SELECT COUNT(*) FROM {table} '
+        f"SELECT COUNT(*) FROM {table} "
         f'WHERE "{col_a}" IS NOT NULL AND "{col_b}" IS NOT NULL '
         f'AND "{col_a}" < "{col_b}"'
     )

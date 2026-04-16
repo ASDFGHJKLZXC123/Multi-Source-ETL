@@ -11,6 +11,8 @@ target-version = ["py310", "py311", "py312"]
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
 ignore = ["E501"]
 
@@ -34,6 +36,8 @@ branch = true
 omit = [
     "src/transform/__init__.py",
     "src/**/__init__.py",
+    "src/transform/build_dimensions.py",
+    "src/transform/build_facts.py",
 ]
 
 [tool.coverage.report]

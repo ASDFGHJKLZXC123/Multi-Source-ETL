@@ -110,7 +110,7 @@ def validate_dataframe(
 def _dtype_compatible(actual: str, expected_category: str) -> bool:
     """Return True if *actual* dtype is broadly compatible with *expected_category*."""
     category_map: dict[str, list[str]] = {
-        "object": ["object", "string", "category"],
+        "object": ["object", "string", "str", "category"],
         "int": ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"],
         "float": ["float16", "float32", "float64"],
         "bool": ["bool"],
@@ -145,7 +145,13 @@ def log_data_quality_report(df: pd.DataFrame, name: str) -> dict[str, Any]:
     col_count = len(df.columns)
     duplicate_count = int(df.duplicated().sum())
 
-    logger.info("[QA] '{}' — {:,} rows, {} columns, {:,} duplicate rows", name, row_count, col_count, duplicate_count)
+    logger.info(
+        "[QA] '{}' — {:,} rows, {} columns, {:,} duplicate rows",
+        name,
+        row_count,
+        col_count,
+        duplicate_count,
+    )
 
     null_report: dict[str, float] = {}
     for col in df.columns:

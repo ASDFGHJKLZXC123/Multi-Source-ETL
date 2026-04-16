@@ -45,11 +45,13 @@ class TestNormalizeCityName:
 
 class TestValidateDataframe:
     def _make_df(self):
-        return pd.DataFrame({
-            "order_id": ["a", "b", "c"],
-            "price":    [10.0, 20.5, None],
-            "qty":      [1, 2, 3],
-        })
+        return pd.DataFrame(
+            {
+                "order_id": ["a", "b", "c"],
+                "price": [10.0, 20.5, None],
+                "qty": [1, 2, 3],
+            }
+        )
 
     def test_passes_on_valid_schema(self):
         df = self._make_df()

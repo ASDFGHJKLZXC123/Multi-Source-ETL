@@ -129,7 +129,7 @@ _DUMMY_PATH = Path("/tmp/mock_silver.parquet")
 _WX_START = "2017-01-01"
 _WX_END = "2017-12-31"
 _FX_START = "2017-01-02"  # Monday
-_FX_END = "2017-01-08"    # Sunday
+_FX_END = "2017-01-08"  # Sunday
 
 
 # ===========================================================================
@@ -305,8 +305,16 @@ def test_transform_weather_empty_input_returns_early(
     from src.transform.transform_weather import transform_weather
 
     mock_extract.return_value = pd.DataFrame(
-        columns=["city", "state", "date", "temp_max", "temp_min",
-                 "precipitation", "windspeed", "weathercode"]
+        columns=[
+            "city",
+            "state",
+            "date",
+            "temp_max",
+            "temp_min",
+            "precipitation",
+            "windspeed",
+            "weathercode",
+        ]
     )
 
     valid_df, total_quarantined = transform_weather(_WX_START, _WX_END)
@@ -351,8 +359,12 @@ def test_transform_weather_casts_weathercode_to_int64(
     from src.transform.transform_weather import transform_weather
 
     mock_extract.return_value = _make_weather(
-        {"city": "sao paulo", "state": "SP", "date": pd.Timestamp("2017-03-15"),
-         "weathercode": 61.0},
+        {
+            "city": "sao paulo",
+            "state": "SP",
+            "date": pd.Timestamp("2017-03-15"),
+            "weathercode": 61.0,
+        },
     )
 
     valid_df, total_quarantined = transform_weather(_WX_START, _WX_END)
@@ -395,9 +407,7 @@ def test_transform_fx_happy_path(
     assert valid_df["rate"].isna().sum() == 0
 
     # Saturday (2017-01-07) must carry forward Friday's rate (3.24)
-    sat_rate = valid_df.loc[
-        valid_df["date"] == pd.Timestamp("2017-01-07"), "rate"
-    ].iloc[0]
+    sat_rate = valid_df.loc[valid_df["date"] == pd.Timestamp("2017-01-07"), "rate"].iloc[0]
     assert sat_rate == pytest.approx(3.24)
 
     mock_write.assert_called_once()
@@ -449,8 +459,6 @@ def test_transform_fx_deduplicates_dates(
     assert len(valid_df) == 2
     assert valid_df["date"].duplicated().sum() == 0
 
-    jan2_rate = valid_df.loc[
-        valid_df["date"] == pd.Timestamp("2017-01-02"), "rate"
-    ].iloc[0]
+    jan2_rate = valid_df.loc[valid_df["date"] == pd.Timestamp("2017-01-02"), "rate"].iloc[0]
     assert jan2_rate == pytest.approx(3.15)
     assert total_quarantined == 0

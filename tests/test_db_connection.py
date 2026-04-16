@@ -2,9 +2,10 @@
 Pytest version of the Stage 0 connectivity checks.
 Requires a live PostgreSQL instance — skip if DB_HOST is not set.
 """
+
 import os
+
 import pytest
-from pathlib import Path
 
 # Skip the entire module if no DB config is present
 pytestmark = pytest.mark.skipif(
@@ -14,8 +15,10 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_sqlalchemy_connection():
-    from src.utils.db import get_engine
     from sqlalchemy import text
+
+    from src.utils.db import get_engine
+
     engine = get_engine()
     with engine.connect() as conn:
         result = conn.execute(text("SELECT 1")).scalar()
@@ -24,6 +27,7 @@ def test_sqlalchemy_connection():
 
 def test_psycopg2_connection():
     from src.utils.db import get_connection
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT current_database()")
@@ -32,12 +36,16 @@ def test_psycopg2_connection():
 
 
 def test_schemas_exist():
-    from src.utils.db import get_engine
     from sqlalchemy import text
+
+    from src.utils.db import get_engine
+
     engine = get_engine()
     with engine.connect() as conn:
-        count = conn.execute(text(
-            "SELECT COUNT(*) FROM information_schema.schemata "
-            "WHERE schema_name IN ('source_system', 'analytics')"
-        )).scalar()
+        count = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM information_schema.schemata "
+                "WHERE schema_name IN ('source_system', 'analytics')"
+            )
+        ).scalar()
     assert int(count) == 2, "Both ETL schemas must exist — run init_schemas() first"

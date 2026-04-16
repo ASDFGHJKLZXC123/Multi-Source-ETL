@@ -42,10 +42,10 @@ from src.extract.extract_weather import DEFAULT_CITIES, extract_weather
 from src.utils.db import get_pipeline_config
 from src.utils.logger import logger
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _load_manifest(path: Path) -> dict[str, Any]:
     """Read an existing manifest JSON from *path*.
@@ -83,6 +83,7 @@ def _save_manifest(path: Path, manifest: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 # Public extraction functions
 # ---------------------------------------------------------------------------
+
 
 def extract_weather_to_bronze(
     start_date: str,
@@ -152,13 +153,15 @@ def extract_weather_to_bronze(
         status = "partial"
         logger.warning(
             "Weather extraction partial: {} of {} cities succeeded",
-            cities_extracted, cities_requested,
+            cities_extracted,
+            cities_requested,
         )
     else:
         status = "success"
         logger.info(
             "Weather extraction success: {:,} records for {} cities",
-            total_records, cities_extracted,
+            total_records,
+            cities_extracted,
         )
 
     manifest.update(
@@ -207,9 +210,7 @@ def extract_fx_to_bronze(
         ``quote_currency``, ``trading_days``, ``calendar_days``,
         ``extracted_at``, ``status``.
     """
-    manifest_path = (
-        BRONZE_API / f"fx_manifest_{base}_{quote}_{start_date}_{end_date}.json"
-    )
+    manifest_path = BRONZE_API / f"fx_manifest_{base}_{quote}_{start_date}_{end_date}.json"
 
     if manifest_path.exists():
         logger.info("FX manifest already exists — loading from {}", manifest_path)
@@ -217,9 +218,7 @@ def extract_fx_to_bronze(
 
     # Compute expected calendar days for the manifest regardless of outcome.
     try:
-        calendar_days = int(
-            (pd.Timestamp(end_date) - pd.Timestamp(start_date)).days + 1
-        )
+        calendar_days = int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days + 1)
     except Exception:
         calendar_days = 0
 
@@ -265,7 +264,10 @@ def extract_fx_to_bronze(
 
     logger.info(
         "FX extraction success: {:,} calendar days, ~{:,} trading days ({}/{})",
-        len(df), trading_days, base, quote,
+        len(df),
+        trading_days,
+        base,
+        quote,
     )
 
     _save_manifest(manifest_path, manifest)
@@ -337,6 +339,7 @@ def extract_all_apis(
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def _build_parser() -> argparse.ArgumentParser:
     """Construct the argument parser for the CLI entry point."""
@@ -472,9 +475,7 @@ def main(argv: list[str] | None = None) -> int:
 
     _print_summary(results)
 
-    any_failed = any(
-        m.get("status") == "failed" for m in results.values()
-    )
+    any_failed = any(m.get("status") == "failed" for m in results.values())
     return 1 if any_failed else 0
 
 

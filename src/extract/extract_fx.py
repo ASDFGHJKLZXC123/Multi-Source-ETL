@@ -41,6 +41,7 @@ _MAX_DAYS_PER_REQUEST = 365
 # HTTP helper
 # ---------------------------------------------------------------------------
 
+
 def _get_json(url: str, params: dict | None = None) -> dict:
     """Perform a GET request and return the parsed JSON body.
 
@@ -68,6 +69,7 @@ def _get_json(url: str, params: dict | None = None) -> dict:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def extract_fx_rates(
     start_date: str,
@@ -167,13 +169,20 @@ def _fetch_fx_timeseries(
         )
         logger.debug(
             "Fetching FX rates: {} → {} ({} to {})",
-            base, quote,
-            chunk_start.date(), chunk_end.date(),
+            base,
+            quote,
+            chunk_start.date(),
+            chunk_end.date(),
         )
         try:
             payload = _get_json(url)
         except requests.HTTPError as exc:
-            logger.error("Frankfurter API error for chunk {}-{}: {}", chunk_start.date(), chunk_end.date(), exc)
+            logger.error(
+                "Frankfurter API error for chunk {}-{}: {}",
+                chunk_start.date(),
+                chunk_end.date(),
+                exc,
+            )
             raise
 
         # Frankfurter v2 time-series response — two known shapes:
@@ -207,7 +216,9 @@ def _fetch_fx_timeseries(
 
     logger.info(
         "Frankfurter returned {:,} trading-day rates ({} to {})",
-        len(all_rates), start_date, end_date,
+        len(all_rates),
+        start_date,
+        end_date,
     )
     return all_rates
 
@@ -262,15 +273,18 @@ def _build_dataframe(
 
     logger.info(
         "FX DataFrame built: {:,} calendar days, {:,} gaps forward-filled",
-        len(series), gap_count,
+        len(series),
+        gap_count,
     )
 
-    df = pd.DataFrame({
-        "date":           series.index,
-        "base_currency":  base,
-        "quote_currency": quote,
-        "rate":           series.values,
-    })
+    df = pd.DataFrame(
+        {
+            "date": series.index,
+            "base_currency": base,
+            "quote_currency": quote,
+            "rate": series.values,
+        }
+    )
     return df
 
 

@@ -23,7 +23,6 @@ Contract verified in every test
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 from src.transform.schemas import (
     SilverFxSchema,
@@ -31,7 +30,6 @@ from src.transform.schemas import (
     SilverWeatherSchema,
     validate_silver,
 )
-
 
 # ---------------------------------------------------------------------------
 # Minimal row-builder helpers
@@ -153,9 +151,9 @@ class TestSilverOrderSchema:
         for status in VALID_ORDER_STATUSES:
             df = _make_order_row(order_id=1, order_status=status)
             valid_df, invalid_df = validate_silver(df, SilverOrderSchema, f"orders_{status}")
-            assert len(invalid_df) == 0, (
-                f"Status '{status}' is in VALID_ORDER_STATUSES but was quarantined"
-            )
+            assert (
+                len(invalid_df) == 0
+            ), f"Status '{status}' is in VALID_ORDER_STATUSES but was quarantined"
 
     def test_validate_silver_invalid_df_always_has_quarantine_reason_column(self) -> None:
         """The quarantine_reason column must be present in invalid_df even when empty."""
@@ -233,9 +231,7 @@ class TestSilverWeatherSchema:
 
     def test_weather_valid_row_passes(self, minimal_weather_df: pd.DataFrame) -> None:
         """A fully valid 3-row weather DataFrame must produce zero invalid rows."""
-        valid_df, invalid_df = validate_silver(
-            minimal_weather_df, SilverWeatherSchema, "weather"
-        )
+        valid_df, invalid_df = validate_silver(minimal_weather_df, SilverWeatherSchema, "weather")
 
         assert len(invalid_df) == 0, (
             f"Expected 0 invalid rows; got {len(invalid_df)}. "

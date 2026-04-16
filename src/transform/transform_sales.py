@@ -30,13 +30,13 @@ from src.transform.schemas import (
     SilverOrderSchema,
     validate_silver,
 )
-from src.utils.logger import logger
 from src.transform.utils import (
     log_transform_summary,
     quarantine_rows,
     read_latest_bronze_parquet,
     write_silver,
 )
+from src.utils.logger import logger
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -244,9 +244,7 @@ def transform_order_items(
     null_order_mask: pd.Series = df["order_id"].isna()
     if null_order_mask.any():
         quarantine_frames.append(df.loc[null_order_mask])
-        quarantine_reasons.append(
-            pd.Series("null order_id", index=df.index[null_order_mask])
-        )
+        quarantine_reasons.append(pd.Series("null order_id", index=df.index[null_order_mask]))
         df = df.loc[~null_order_mask].copy()
 
     # ------------------------------------------------------------------
@@ -255,9 +253,7 @@ def transform_order_items(
     null_price_mask: pd.Series = df["unit_price"].isna()
     if null_price_mask.any():
         quarantine_frames.append(df.loc[null_price_mask])
-        quarantine_reasons.append(
-            pd.Series("null unit_price", index=df.index[null_price_mask])
-        )
+        quarantine_reasons.append(pd.Series("null unit_price", index=df.index[null_price_mask]))
         df = df.loc[~null_price_mask].copy()
 
     # ------------------------------------------------------------------

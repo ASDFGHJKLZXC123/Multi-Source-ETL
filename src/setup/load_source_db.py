@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 from sqlalchemy import text
@@ -44,14 +43,33 @@ _DDL_PATH = _PROJECT_ROOT / "sql" / "ddl" / "03_source_system.sql"
 # Brazilian state → region mapping used for stores.region
 # ---------------------------------------------------------------------------
 _BRAZIL_REGION_MAP: dict[str, str] = {
-    "AC": "Norte",       "AM": "Norte",        "AP": "Norte",       "PA": "Norte",
-    "RO": "Norte",       "RR": "Norte",        "TO": "Norte",
-    "AL": "Nordeste",    "BA": "Nordeste",     "CE": "Nordeste",    "MA": "Nordeste",
-    "PB": "Nordeste",    "PE": "Nordeste",     "PI": "Nordeste",    "RN": "Nordeste",
+    "AC": "Norte",
+    "AM": "Norte",
+    "AP": "Norte",
+    "PA": "Norte",
+    "RO": "Norte",
+    "RR": "Norte",
+    "TO": "Norte",
+    "AL": "Nordeste",
+    "BA": "Nordeste",
+    "CE": "Nordeste",
+    "MA": "Nordeste",
+    "PB": "Nordeste",
+    "PE": "Nordeste",
+    "PI": "Nordeste",
+    "RN": "Nordeste",
     "SE": "Nordeste",
-    "DF": "Centro-Oeste", "GO": "Centro-Oeste", "MT": "Centro-Oeste", "MS": "Centro-Oeste",
-    "ES": "Sudeste",     "MG": "Sudeste",      "RJ": "Sudeste",     "SP": "Sudeste",
-    "PR": "Sul",         "RS": "Sul",          "SC": "Sul",
+    "DF": "Centro-Oeste",
+    "GO": "Centro-Oeste",
+    "MT": "Centro-Oeste",
+    "MS": "Centro-Oeste",
+    "ES": "Sudeste",
+    "MG": "Sudeste",
+    "RJ": "Sudeste",
+    "SP": "Sudeste",
+    "PR": "Sul",
+    "RS": "Sul",
+    "SC": "Sul",
 }
 
 # Generated columns that PostgreSQL computes automatically — never include in inserts.
@@ -61,6 +79,7 @@ _GENERATED_COLUMNS = {"delivery_days_actual", "delivery_days_estimated"}
 # ---------------------------------------------------------------------------
 # Step 1 — Kaggle download
 # ---------------------------------------------------------------------------
+
 
 def download_olist_data() -> None:
     """Download Olist CSVs via kagglehub if not already present.
@@ -90,9 +109,7 @@ def download_olist_data() -> None:
 
         csv_files = list(source_dir.rglob("*.csv"))
         if not csv_files:
-            raise FileNotFoundError(
-                f"No CSV files found in kagglehub download path: {source_dir}"
-            )
+            raise FileNotFoundError(f"No CSV files found in kagglehub download path: {source_dir}")
 
         for csv_file in tqdm(csv_files, desc="Copying CSVs to bronze/olist"):
             destination = _BRONZE_OLIST / csv_file.name
@@ -117,6 +134,7 @@ def download_olist_data() -> None:
 # Step 2 — DDL execution
 # ---------------------------------------------------------------------------
 
+
 def create_source_tables() -> None:
     """Execute sql/ddl/03_source_system.sql to create enterprise schema objects.
 
@@ -126,8 +144,7 @@ def create_source_tables() -> None:
     """
     if not _DDL_PATH.exists():
         raise FileNotFoundError(
-            f"DDL script not found: {_DDL_PATH}. "
-            "Ensure sql/ddl/03_source_system.sql is present."
+            f"DDL script not found: {_DDL_PATH}. " "Ensure sql/ddl/03_source_system.sql is present."
         )
 
     logger.info("Executing DDL: {}", _DDL_PATH.name)
@@ -143,6 +160,7 @@ def create_source_tables() -> None:
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
 
 def _table_has_data(engine: Engine, schema: str, table_name: str) -> bool:
     """Return True if ``schema.table_name`` already contains at least one row.
@@ -244,6 +262,7 @@ def _batch_insert(
 # Step 3 — Individual table loaders
 # ---------------------------------------------------------------------------
 
+
 def load_customers() -> dict[str, int]:
     """Load customers into source_system.customers.
 
@@ -287,12 +306,14 @@ def load_customers() -> dict[str, int]:
             )
 
         # Map to enterprise column names.
-        df = df.rename(columns={
-            "customer_unique_id":        "customer_code",
-            "customer_zip_code_prefix":  "zip_code_prefix",
-            "customer_city":             "city",
-            "customer_state":            "state",
-        })
+        df = df.rename(
+            columns={
+                "customer_unique_id": "customer_code",
+                "customer_zip_code_prefix": "zip_code_prefix",
+                "customer_city": "city",
+                "customer_state": "state",
+            }
+        )
 
         # Enterprise schema columns only (SERIAL PK excluded — PostgreSQL assigns it).
         keep = ["customer_code", "zip_code_prefix", "city", "state"]
@@ -343,12 +364,14 @@ def load_stores() -> dict[str, int]:
 
         df = raw.drop_duplicates(subset=["seller_id"]).copy()
 
-        df = df.rename(columns={
-            "seller_id":               "store_code",
-            "seller_zip_code_prefix":  "zip_code_prefix",
-            "seller_city":             "city",
-            "seller_state":            "state",
-        })
+        df = df.rename(
+            columns={
+                "seller_id": "store_code",
+                "seller_zip_code_prefix": "zip_code_prefix",
+                "seller_city": "city",
+                "seller_state": "state",
+            }
+        )
 
         df["region"] = df["state"].str.upper().map(_BRAZIL_REGION_MAP).fillna("Desconhecido")
 
@@ -425,15 +448,17 @@ def load_products() -> dict[str, int]:
         )
 
         # Rename to enterprise schema column names.
-        df = df.rename(columns={
-            "product_id":                    "product_code",
-            "product_category_name":         "category_name_pt",
-            "product_category_name_english": "category_name_en",
-            "product_weight_g":              "weight_g",
-            "product_length_cm":             "length_cm",
-            "product_height_cm":             "height_cm",
-            "product_width_cm":              "width_cm",
-        })
+        df = df.rename(
+            columns={
+                "product_id": "product_code",
+                "product_category_name": "category_name_pt",
+                "product_category_name_english": "category_name_en",
+                "product_weight_g": "weight_g",
+                "product_length_cm": "length_cm",
+                "product_height_cm": "height_cm",
+                "product_width_cm": "width_cm",
+            }
+        )
 
         # product_name_lenght / product_description_lenght are Olist-only columns
         # that do not exist in the enterprise schema — intentionally excluded.
@@ -604,9 +629,7 @@ def load_order_items(
     if _table_has_data(engine, "source_system", "order_items"):
         logger.info("source_system.order_items already has data — skipping load.")
         with engine.connect() as conn:
-            count = conn.execute(
-                text("SELECT COUNT(*) FROM source_system.order_items")
-            ).scalar()
+            count = conn.execute(text("SELECT COUNT(*) FROM source_system.order_items")).scalar()
         return int(count or 0)
 
     logger.info("--- Loading source_system.order_items ---")
@@ -669,10 +692,12 @@ def load_order_items(
         df["shipping_limit_date"] = pd.to_datetime(df["shipping_limit_date"], errors="coerce")
 
         # Rename to enterprise schema column names.
-        df = df.rename(columns={
-            "order_item_id": "line_number",
-            "price":         "unit_price",
-        })
+        df = df.rename(
+            columns={
+                "order_item_id": "line_number",
+                "price": "unit_price",
+            }
+        )
 
         keep = [
             "order_id",
@@ -701,6 +726,7 @@ def load_order_items(
 # Step 4 — Post-load validation
 # ---------------------------------------------------------------------------
 
+
 def run_validation() -> None:
     """Run row-count and FK-integrity validation queries and log results.
 
@@ -712,10 +738,10 @@ def run_validation() -> None:
     engine = get_engine()
 
     count_queries: dict[str, str] = {
-        "customers":   "SELECT COUNT(*) FROM source_system.customers",
-        "stores":      "SELECT COUNT(*) FROM source_system.stores",
-        "products":    "SELECT COUNT(*) FROM source_system.products",
-        "orders":      "SELECT COUNT(*) FROM source_system.orders",
+        "customers": "SELECT COUNT(*) FROM source_system.customers",
+        "stores": "SELECT COUNT(*) FROM source_system.stores",
+        "products": "SELECT COUNT(*) FROM source_system.products",
+        "orders": "SELECT COUNT(*) FROM source_system.orders",
         "order_items": "SELECT COUNT(*) FROM source_system.order_items",
     }
 
@@ -758,6 +784,7 @@ def run_validation() -> None:
 # ---------------------------------------------------------------------------
 # Main orchestrator
 # ---------------------------------------------------------------------------
+
 
 def run() -> None:
     """Orchestrate the full Stage 1 source-system load end-to-end.

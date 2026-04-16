@@ -42,6 +42,7 @@ from src.utils.logger import logger
 # Stage implementations
 # ---------------------------------------------------------------------------
 
+
 def stage_init() -> None:
     """Stage 0a: Run DDL init scripts — create schemas and pipeline_metadata.
 
@@ -49,12 +50,14 @@ def stage_init() -> None:
     All DDL uses IF NOT EXISTS so it is idempotent.
     """
     from src.utils.db import init_schemas
+
     init_schemas()
 
 
 def stage_setup() -> None:
     """Stage 0b: Download Olist dataset, create source_system schema, load CSVs."""
     from src.setup.load_source_db import run as run_setup
+
     run_setup()
 
 
@@ -144,6 +147,7 @@ def stage_warehouse() -> None:
     Facts: INSERT … ON CONFLICT DO UPDATE (idempotent upsert).
     """
     from src.load.load_to_warehouse import run as run_load
+
     run_load()
 
 
@@ -161,6 +165,7 @@ def stage_quality(halt_on: str = "CRITICAL") -> None:
         stage records a failure and stops execution.
     """
     from src.quality.runner import run as run_checks
+
     run_checks(halt_on=halt_on)
 
 
@@ -170,20 +175,21 @@ def stage_quality(halt_on: str = "CRITICAL") -> None:
 
 #: All named stages available for --stage selection.
 STAGES: dict[str, Callable[[], None]] = {
-    "init":      stage_init,
-    "setup":     stage_setup,
-    "extract":   stage_extract,
-    "load":      stage_load,
-    "silver":    stage_silver,
-    "gold":      stage_gold,
+    "init": stage_init,
+    "setup": stage_setup,
+    "extract": stage_extract,
+    "load": stage_load,
+    "silver": stage_silver,
+    "gold": stage_gold,
     "warehouse": stage_warehouse,
-    "quality":   stage_quality,
+    "quality": stage_quality,
 }
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -216,9 +222,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--stage",
         choices=sorted(STAGES.keys()),
         metavar="STAGE",
-        help=(
-            f"Run exactly one stage. Choices: {', '.join(sorted(STAGES))}."
-        ),
+        help=(f"Run exactly one stage. Choices: {', '.join(sorted(STAGES))}."),
     )
 
     parser.add_argument(
@@ -254,13 +258,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # Resolve execution mode
     if args.full_refresh:
-        config = PipelineConfig.for_mode(
-            PipelineMode.FULL_REFRESH, fail_fast=fail_fast
-        )
+        config = PipelineConfig.for_mode(PipelineMode.FULL_REFRESH, fail_fast=fail_fast)
     elif args.incremental:
-        config = PipelineConfig.for_mode(
-            PipelineMode.INCREMENTAL, fail_fast=fail_fast
-        )
+        config = PipelineConfig.for_mode(PipelineMode.INCREMENTAL, fail_fast=fail_fast)
     elif args.stage:
         config = PipelineConfig.for_mode(
             PipelineMode.SINGLE,
@@ -273,9 +273,7 @@ def main(argv: list[str] | None = None) -> int:
             "No mode flag supplied — defaulting to --full-refresh. "
             "Use --incremental to skip the extract stage."
         )
-        config = PipelineConfig.for_mode(
-            PipelineMode.FULL_REFRESH, fail_fast=fail_fast
-        )
+        config = PipelineConfig.for_mode(PipelineMode.FULL_REFRESH, fail_fast=fail_fast)
 
     report = run_pipeline(STAGES, config)
     return 0 if report.success else 1

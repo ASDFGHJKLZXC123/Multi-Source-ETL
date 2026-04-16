@@ -38,10 +38,10 @@ from src.extract.extract_flat_files import extract_municipios
 from src.utils.logger import logger
 from src.utils.validators import log_data_quality_report
 
-
 # ---------------------------------------------------------------------------
 # Public validation helpers
 # ---------------------------------------------------------------------------
+
 
 def validate_flat_file(
     file_path: Path,
@@ -116,6 +116,7 @@ def validate_flat_file(
 # Municipios ingestion
 # ---------------------------------------------------------------------------
 
+
 def ingest_municipios(force: bool = False) -> tuple[pd.DataFrame, bool]:
     """Download (if needed) and validate the municipalities reference file.
 
@@ -154,7 +155,8 @@ def ingest_municipios(force: bool = False) -> tuple[pd.DataFrame, bool]:
     if is_valid:
         logger.info(
             "Municipios validation PASSED ({:,} rows, {} required columns present)",
-            len(df), len(required_columns),
+            len(df),
+            len(required_columns),
         )
     else:
         for issue in issues:
@@ -167,6 +169,7 @@ def ingest_municipios(force: bool = False) -> tuple[pd.DataFrame, bool]:
 # ---------------------------------------------------------------------------
 # Olist file ingestion
 # ---------------------------------------------------------------------------
+
 
 def ingest_olist_file(filename_stem: str) -> tuple[pd.DataFrame | None, bool]:
     """Read and validate a single Olist dataset CSV.
@@ -187,9 +190,7 @@ def ingest_olist_file(filename_stem: str) -> tuple[pd.DataFrame | None, bool]:
     file_path = BRONZE_MANUAL / f"{filename_stem}.csv"
 
     if not file_path.exists():
-        logger.warning(
-            "Olist file not found: {} — skipping ingestion", file_path
-        )
+        logger.warning("Olist file not found: {} — skipping ingestion", file_path)
         return None, False
 
     required_columns = FLAT_FILE_SCHEMAS.get(filename_stem, [])
@@ -198,9 +199,7 @@ def ingest_olist_file(filename_stem: str) -> tuple[pd.DataFrame | None, bool]:
     if not is_valid:
         for issue in issues:
             logger.warning("[{}] validation issue: {}", filename_stem, issue)
-        logger.warning(
-            "[{}] validation FAILED ({} issue(s))", filename_stem, len(issues)
-        )
+        logger.warning("[{}] validation FAILED ({} issue(s))", filename_stem, len(issues))
 
     # Read the full DataFrame regardless of validation outcome so the quality
     # report and return value are populated for diagnostic purposes.
@@ -215,7 +214,9 @@ def ingest_olist_file(filename_stem: str) -> tuple[pd.DataFrame | None, bool]:
     if is_valid:
         logger.info(
             "[{}] validation PASSED ({:,} rows, {} required columns present)",
-            filename_stem, len(df), len(required_columns),
+            filename_stem,
+            len(df),
+            len(required_columns),
         )
 
     return df, is_valid
@@ -224,6 +225,7 @@ def ingest_olist_file(filename_stem: str) -> tuple[pd.DataFrame | None, bool]:
 # ---------------------------------------------------------------------------
 # Bulk validation
 # ---------------------------------------------------------------------------
+
 
 def validate_all_manual_files() -> dict[str, bool]:
     """Validate every file registered in :data:`FLAT_FILE_SCHEMAS`.
@@ -263,7 +265,10 @@ def validate_all_manual_files() -> dict[str, bool]:
     logger.info("-" * 55)
     logger.info(
         "Flat-file validation summary: {}/{} PASS, {}/{} FAIL",
-        passed, total, failed, total,
+        passed,
+        total,
+        failed,
+        total,
     )
 
     return results
@@ -273,11 +278,10 @@ def validate_all_manual_files() -> dict[str, bool]:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def _all_file_choices() -> list[str]:
     """Return the list of valid ``--file`` argument choices."""
-    return ["all", "municipios"] + [
-        stem for stem in FLAT_FILE_SCHEMAS if stem != "municipios"
-    ]
+    return ["all", "municipios"] + [stem for stem in FLAT_FILE_SCHEMAS if stem != "municipios"]
 
 
 def _build_parser() -> argparse.ArgumentParser:

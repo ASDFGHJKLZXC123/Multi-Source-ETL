@@ -47,6 +47,7 @@ BRONZE_MANUAL: Final[Path] = _PROJECT_ROOT / "data" / "bronze" / "manual"
 # Retry / backoff policy
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class RetryConfig:
     """Immutable configuration for HTTP / database retry behaviour.
@@ -83,7 +84,7 @@ class RetryConfig:
         -------
         int
         """
-        return self.backoff_base ** attempt
+        return self.backoff_base**attempt
 
 
 #: Default retry policy shared across all Stage 2 extractors.
@@ -163,6 +164,7 @@ FLAT_FILE_SCHEMAS: Final[dict[str, list[str]]] = {
 # ---------------------------------------------------------------------------
 # File naming helpers
 # ---------------------------------------------------------------------------
+
 
 def timestamp_suffix() -> str:
     """Return a sortable timestamp string suitable for use in file names.

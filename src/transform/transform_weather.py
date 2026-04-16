@@ -29,7 +29,6 @@ import sys
 
 import pandas as pd
 
-from src.utils.logger import logger
 from src.extract.extract_weather import DEFAULT_CITIES, extract_weather
 from src.transform.schemas import SilverWeatherSchema, validate_silver
 from src.transform.utils import (
@@ -38,6 +37,7 @@ from src.transform.utils import (
     quarantine_rows,
     write_silver,
 )
+from src.utils.logger import logger
 
 __all__ = ["transform_weather", "run"]
 
@@ -95,9 +95,7 @@ def transform_weather(
     null_date_mask: pd.Series = df["date"].isna()
     if null_date_mask.any():
         quarantine_frames.append(df.loc[null_date_mask])
-        quarantine_reasons.append(
-            pd.Series("null date", index=df.index[null_date_mask])
-        )
+        quarantine_reasons.append(pd.Series("null date", index=df.index[null_date_mask]))
         df = df.loc[~null_date_mask].copy()
 
     # ------------------------------------------------------------------

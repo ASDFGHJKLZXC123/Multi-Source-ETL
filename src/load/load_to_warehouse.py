@@ -48,24 +48,25 @@ from src.utils.logger import logger
 
 # (parquet_stem, analytics_table_name)
 _DIM_TABLES: list[tuple[str, str]] = [
-    ("dim_date",     "dim_date"),
+    ("dim_date", "dim_date"),
     ("dim_customer", "dim_customer"),
-    ("dim_product",  "dim_product"),
-    ("dim_store",    "dim_store"),
+    ("dim_product", "dim_product"),
+    ("dim_store", "dim_store"),
     ("dim_currency", "dim_currency"),
 ]
 
 # (parquet_stem, analytics_table_name, pk_columns_list)
 _FACT_TABLES: list[tuple[str, str, list[str]]] = [
-    ("fact_sales",         "fact_sales",         ["order_item_id"]),
-    ("fact_weather_daily", "fact_weather_daily",  ["date_key", "city", "state"]),
-    ("fact_fx_rates",      "fact_fx_rates",       ["date_key", "base_currency_key", "quote_currency_key"]),
+    ("fact_sales", "fact_sales", ["order_item_id"]),
+    ("fact_weather_daily", "fact_weather_daily", ["date_key", "city", "state"]),
+    ("fact_fx_rates", "fact_fx_rates", ["date_key", "base_currency_key", "quote_currency_key"]),
 ]
 
 
 # ---------------------------------------------------------------------------
 # Dimension loader
 # ---------------------------------------------------------------------------
+
 
 def load_dimension(
     engine: Engine,
@@ -133,6 +134,7 @@ def load_dimension(
 # ---------------------------------------------------------------------------
 # Fact loader
 # ---------------------------------------------------------------------------
+
 
 def load_fact(
     engine: Engine,
@@ -205,9 +207,7 @@ def load_fact(
     # Build quoted column lists for the SQL statement.
     cols_sql = ", ".join(f'"{c}"' for c in all_cols)
     pk_conflict_sql = ", ".join(f'"{c}"' for c in pk_cols)
-    update_sql = ",\n        ".join(
-        f'"{c}" = EXCLUDED."{c}"' for c in non_pk_cols
-    )
+    update_sql = ",\n        ".join(f'"{c}" = EXCLUDED."{c}"' for c in non_pk_cols)
 
     upsert_sql = (
         f'INSERT INTO analytics."{table}" ({cols_sql})\n'
@@ -259,6 +259,7 @@ def _drop_staging_table(engine: Engine, staging_table: str) -> None:
 # Orchestrator
 # ---------------------------------------------------------------------------
 
+
 def load_all(
     dims_dir: Path | None = None,
     facts_dir: Path | None = None,
@@ -308,9 +309,7 @@ def load_all(
             row_count = load_dimension(engine, parquet_path, table, loaded_at)
             results[table] = row_count
         except Exception as exc:
-            logger.error(
-                "Failed to load dimension analytics.{}: {}", table, exc
-            )
+            logger.error("Failed to load dimension analytics.{}: {}", table, exc)
             raise
 
     # ---- Facts -------------------------------------------------------------
@@ -327,9 +326,7 @@ def load_all(
             row_count = load_fact(engine, parquet_path, table, pk_cols, loaded_at)
             results[table] = row_count
         except Exception as exc:
-            logger.error(
-                "Failed to load fact analytics.{}: {}", table, exc
-            )
+            logger.error("Failed to load fact analytics.{}: {}", table, exc)
             raise
 
     # ---- Summary -----------------------------------------------------------
@@ -364,6 +361,7 @@ def _log_summary(results: dict[str, int]) -> None:
 # ---------------------------------------------------------------------------
 # Entry points
 # ---------------------------------------------------------------------------
+
 
 def run() -> None:
     """Run the full warehouse load with default paths.

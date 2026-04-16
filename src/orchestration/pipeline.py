@@ -45,9 +45,10 @@ are recorded as SKIPPED so the report is always complete.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 from src.utils.logger import logger
 
@@ -66,11 +67,13 @@ INCREMENTAL_STAGES: list[str] = ["silver", "gold", "warehouse", "quality"]
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 class PipelineMode(str, Enum):
     """Execution mode controlling which stages are run."""
+
     FULL_REFRESH = "full-refresh"
-    INCREMENTAL  = "incremental"
-    SINGLE       = "single"
+    INCREMENTAL = "incremental"
+    SINGLE = "single"
 
 
 @dataclass
@@ -89,9 +92,10 @@ class PipelineConfig:
         Stop at the first stage failure (default ``True``).  Set to
         ``False`` to run all stages and collect all failures.
     """
-    mode:           PipelineMode
+
+    mode: PipelineMode
     stage_sequence: list[str]
-    fail_fast:      bool = True
+    fail_fast: bool = True
 
     @classmethod
     def for_mode(
@@ -99,7 +103,7 @@ class PipelineConfig:
         mode: PipelineMode,
         single_stage: str | None = None,
         fail_fast: bool = True,
-    ) -> "PipelineConfig":
+    ) -> PipelineConfig:
         """Construct a config for a named execution mode.
 
         Parameters
@@ -118,9 +122,7 @@ class PipelineConfig:
             sequence = list(INCREMENTAL_STAGES)
         elif mode is PipelineMode.SINGLE:
             if not single_stage:
-                raise ValueError(
-                    "single_stage must be provided when mode=SINGLE"
-                )
+                raise ValueError("single_stage must be provided when mode=SINGLE")
             sequence = [single_stage]
         else:
             raise ValueError(f"Unknown PipelineMode: {mode!r}")
@@ -140,11 +142,12 @@ class StageResult:
     error:      Exception instance if *status* is ``"failed"``; else ``None``.
     metadata:   Optional dict for stage-specific output (row counts, etc.).
     """
-    name:      str
-    status:    str
+
+    name: str
+    status: str
     elapsed_s: float
-    error:     BaseException | None          = None
-    metadata:  dict[str, Any]               = field(default_factory=dict)
+    error: BaseException | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -158,10 +161,11 @@ class PipelineReport:
     total_elapsed_s: Wall-clock seconds for the whole pipeline.
     success:         ``True`` only when every stage completed without error.
     """
-    mode:             PipelineMode
-    results:          list[StageResult]
-    total_elapsed_s:  float
-    success:          bool
+
+    mode: PipelineMode
+    results: list[StageResult]
+    total_elapsed_s: float
+    success: bool
 
     # ------------------------------------------------------------------
     # Convenience accessors
@@ -193,16 +197,12 @@ class PipelineReport:
             TOTAL                      76.5s  ✓
             ─────────────────────────────────────────────
         """
-        col_stage   = max(len(r.name) for r in self.results) + 2
-        col_status  = 10
+        col_stage = max(len(r.name) for r in self.results) + 2
+        col_status = 10
         col_elapsed = 10
 
         bar = "─" * (col_stage + col_status + col_elapsed + 4)
-        header = (
-            f"{'Stage':<{col_stage}}"
-            f"{'Status':<{col_status}}"
-            f"{'Elapsed':>{col_elapsed}}"
-        )
+        header = f"{'Stage':<{col_stage}}" f"{'Status':<{col_status}}" f"{'Elapsed':>{col_elapsed}}"
 
         rows = [
             bar,
@@ -213,7 +213,7 @@ class PipelineReport:
         ]
         for r in self.results:
             status_label = r.status.upper()
-            elapsed_str  = f"{r.elapsed_s:.1f}s"
+            elapsed_str = f"{r.elapsed_s:.1f}s"
             rows.append(
                 f"{r.name:<{col_stage}}"
                 f"{status_label:<{col_status}}"
@@ -221,7 +221,7 @@ class PipelineReport:
             )
 
         total_str = f"{self.total_elapsed_s:.1f}s"
-        outcome   = "✓" if self.success else "✗"
+        outcome = "✓" if self.success else "✗"
         rows.append(bar)
         rows.append(
             f"{'TOTAL':<{col_stage}}"
@@ -236,6 +236,7 @@ class PipelineReport:
 # ---------------------------------------------------------------------------
 # Internal: single-stage executor
 # ---------------------------------------------------------------------------
+
 
 def _execute_stage(
     name: str,
@@ -267,14 +268,13 @@ def _execute_stage(
     except Exception as exc:  # noqa: BLE001
         elapsed = time.perf_counter() - t_start
         logger.error("✘  Stage [{}] FAILED after {:.1f}s: {}", name, elapsed, exc)
-        return StageResult(
-            name=name, status="failed", elapsed_s=elapsed, error=exc
-        )
+        return StageResult(name=name, status="failed", elapsed_s=elapsed, error=exc)
 
 
 # ---------------------------------------------------------------------------
 # Public: pipeline runner
 # ---------------------------------------------------------------------------
+
 
 def run_pipeline(
     stage_registry: dict[str, Callable[[], None]],
@@ -311,8 +311,7 @@ def run_pipeline(
     unknown = [s for s in config.stage_sequence if s not in stage_registry]
     if unknown:
         raise ValueError(
-            f"Unknown stage(s) in sequence: {unknown}. "
-            f"Valid stages: {sorted(stage_registry)}"
+            f"Unknown stage(s) in sequence: {unknown}. " f"Valid stages: {sorted(stage_registry)}"
         )
 
     border = "═" * 62
@@ -331,9 +330,7 @@ def run_pipeline(
     for stage_name in config.stage_sequence:
         if abort:
             # fail_fast is active and a previous stage failed — mark as skipped
-            results.append(
-                StageResult(name=stage_name, status="skipped", elapsed_s=0.0)
-            )
+            results.append(StageResult(name=stage_name, status="skipped", elapsed_s=0.0))
             logger.info("⊘  Stage [{}] skipped (pipeline aborted)", stage_name)
             continue
 

@@ -20,7 +20,6 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Orders fixture
 # ---------------------------------------------------------------------------
@@ -41,21 +40,15 @@ def minimal_orders_df() -> pd.DataFrame:
             "order_code": ["aaa-111", "bbb-222", "ccc-333"],
             "customer_id": [10, 20, 30],
             "order_status": ["delivered", "shipped", "invoiced"],
-            "order_date": pd.to_datetime(
-                ["2017-03-01", "2017-06-15", "2017-09-20"]
-            ),
+            "order_date": pd.to_datetime(["2017-03-01", "2017-06-15", "2017-09-20"]),
             "order_timestamp": pd.to_datetime(
                 ["2017-03-01 08:00:00", "2017-06-15 12:00:00", "2017-09-20 16:00:00"]
             ),
             "approved_at": pd.to_datetime(
                 ["2017-03-01 09:00:00", "2017-06-15 13:00:00", "2017-09-20 17:00:00"]
             ),
-            "estimated_delivery": pd.to_datetime(
-                ["2017-03-10", "2017-06-25", "2017-09-30"]
-            ),
-            "actual_delivery": pd.to_datetime(
-                ["2017-03-09", "2017-06-24", None]
-            ),
+            "estimated_delivery": pd.to_datetime(["2017-03-10", "2017-06-25", "2017-09-30"]),
+            "actual_delivery": pd.to_datetime(["2017-03-09", "2017-06-24", None]),
             "delivery_days_actual": pd.array([8, 9, None], dtype="Int64"),
             "delivery_days_estimated": pd.array([9, 10, 10], dtype="Int64"),
             "source_channel": ["online", "online", "online"],

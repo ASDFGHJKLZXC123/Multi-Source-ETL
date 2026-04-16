@@ -10,7 +10,6 @@ contracts with quarantine routing for invalid rows; Gold materialises a star sch
 Compose for one-command deployment, a 95-test pytest suite across a Python 3.10–3.12
 CI matrix on GitHub Actions, and a 4-page Power BI dashboard with 27 DAX measures.
 
-**All 14 build stages are complete and production-ready.**
 
 ---
 

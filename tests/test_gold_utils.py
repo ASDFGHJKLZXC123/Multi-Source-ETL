@@ -17,10 +17,8 @@ mocking is required.
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 from src.transform.gold_utils import assign_surrogate_keys, check_referential_integrity
-
 
 # ===========================================================================
 # assign_surrogate_keys
@@ -35,9 +33,9 @@ class TestAssignSurrogateKeys:
         df = pd.DataFrame({"name": ["alice", "bob", "carol"]})
         result = assign_surrogate_keys(df, "customer_key")
 
-        assert result.columns[0] == "customer_key", (
-            f"Expected 'customer_key' as first column; got {list(result.columns)}"
-        )
+        assert (
+            result.columns[0] == "customer_key"
+        ), f"Expected 'customer_key' as first column; got {list(result.columns)}"
         assert "name" in result.columns
 
     def test_assign_surrogate_keys_start_value(self) -> None:
@@ -45,18 +43,22 @@ class TestAssignSurrogateKeys:
         df = pd.DataFrame({"x": [10, 20, 30]})
         result = assign_surrogate_keys(df, "sk")
 
-        assert list(result["sk"]) == [1, 2, 3], (
-            f"Expected [1, 2, 3] with default start; got {list(result['sk'])}"
-        )
+        assert list(result["sk"]) == [
+            1,
+            2,
+            3,
+        ], f"Expected [1, 2, 3] with default start; got {list(result['sk'])}"
 
     def test_assign_surrogate_keys_custom_start(self) -> None:
         """start=100 must produce keys 100, 101, 102 for a 3-row DataFrame."""
         df = pd.DataFrame({"val": ["a", "b", "c"]})
         result = assign_surrogate_keys(df, "dim_key", start=100)
 
-        assert list(result["dim_key"]) == [100, 101, 102], (
-            f"Expected [100, 101, 102]; got {list(result['dim_key'])}"
-        )
+        assert list(result["dim_key"]) == [
+            100,
+            101,
+            102,
+        ], f"Expected [100, 101, 102]; got {list(result['dim_key'])}"
 
     def test_assign_surrogate_keys_empty_df(self) -> None:
         """An empty input DataFrame must return an empty DataFrame that still
@@ -74,9 +76,9 @@ class TestAssignSurrogateKeys:
         original_cols = list(df.columns)
         assign_surrogate_keys(df, "sk")
 
-        assert list(df.columns) == original_cols, (
-            "Input DataFrame columns were mutated by assign_surrogate_keys"
-        )
+        assert (
+            list(df.columns) == original_cols
+        ), "Input DataFrame columns were mutated by assign_surrogate_keys"
 
     def test_assign_surrogate_keys_resets_index(self) -> None:
         """Keys must be assigned by position after a reset_index, not by the

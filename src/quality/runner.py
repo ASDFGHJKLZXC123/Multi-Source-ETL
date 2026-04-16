@@ -139,12 +139,8 @@ def log_summary(results: list[CheckResult]) -> None:
 
     pass_count = sum(1 for r in results if r.status == "PASS")
     fail_count = sum(1 for r in results if r.status == "FAIL")
-    warn_fails = sum(
-        1 for r in results if r.status == "FAIL" and r.severity == "WARNING"
-    )
-    crit_fails = sum(
-        1 for r in results if r.status == "FAIL" and r.severity == "CRITICAL"
-    )
+    warn_fails = sum(1 for r in results if r.status == "FAIL" and r.severity == "WARNING")
+    crit_fails = sum(1 for r in results if r.status == "FAIL" and r.severity == "CRITICAL")
 
     lines.append(
         f"Summary: {pass_count} PASS  |  {fail_count} FAIL  "
@@ -185,8 +181,7 @@ def evaluate_halt(
     """
     threshold = _SEVERITY_ORDER[halt_on]
     return any(
-        r.status == "FAIL" and _SEVERITY_ORDER.get(r.severity, 0) >= threshold
-        for r in results
+        r.status == "FAIL" and _SEVERITY_ORDER.get(r.severity, 0) >= threshold for r in results
     )
 
 

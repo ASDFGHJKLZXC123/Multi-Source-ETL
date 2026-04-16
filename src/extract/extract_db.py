@@ -221,8 +221,7 @@ def extract_all_tables(
         failed_count = total - success_count
         failed_tables = [t for t in BRONZE_DB_TABLES if t not in results]
         logger.warning(
-            "DB extraction finished with errors: {}/{} tables succeeded, "
-            "{} failed: {}",
+            "DB extraction finished with errors: {}/{} tables succeeded, " "{} failed: {}",
             success_count,
             total,
             failed_count,
@@ -235,6 +234,7 @@ def extract_all_tables(
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
+
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point for the DB extractor.
@@ -251,9 +251,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     parser = argparse.ArgumentParser(
         prog="python -m src.extract.extract_db",
-        description=(
-            "Snapshot source_system PostgreSQL tables into Bronze-layer Parquet files."
-        ),
+        description=("Snapshot source_system PostgreSQL tables into Bronze-layer Parquet files."),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"

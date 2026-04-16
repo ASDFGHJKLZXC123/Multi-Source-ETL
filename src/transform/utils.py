@@ -52,6 +52,7 @@ QUARANTINE_DIR: Final[Path] = _PROJECT_ROOT / "data" / "quarantine"
 # Bronze reader
 # ---------------------------------------------------------------------------
 
+
 def read_latest_bronze_parquet(table_dir: Path) -> pd.DataFrame:
     """Read the most-recent Parquet snapshot from a Bronze table directory.
 
@@ -104,6 +105,7 @@ def read_latest_bronze_parquet(table_dir: Path) -> pd.DataFrame:
 # Silver writer
 # ---------------------------------------------------------------------------
 
+
 def write_silver(df: pd.DataFrame, domain: str, name: str) -> Path:
     """Write a transformed DataFrame to the Silver layer.
 
@@ -154,6 +156,7 @@ def write_silver(df: pd.DataFrame, domain: str, name: str) -> Path:
 # ---------------------------------------------------------------------------
 # Quarantine writer
 # ---------------------------------------------------------------------------
+
 
 def quarantine_rows(
     df: pd.DataFrame,
@@ -234,6 +237,7 @@ def quarantine_rows(
 # Transform summary logger
 # ---------------------------------------------------------------------------
 
+
 def log_transform_summary(
     stage: str,
     before: int,
@@ -274,6 +278,7 @@ def log_transform_summary(
 # ---------------------------------------------------------------------------
 # Pipeline date range helper
 # ---------------------------------------------------------------------------
+
 
 def get_pipeline_date_range() -> tuple[str, str]:
     """Return the configured pipeline processing date range.

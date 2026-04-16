@@ -62,6 +62,7 @@ GOLD_FACTS_DIR: Final[Path] = GOLD_DIR / "facts"
 # Silver reader
 # ---------------------------------------------------------------------------
 
+
 def read_latest_silver(domain: str, name_prefix: str) -> pd.DataFrame:
     """Read the most-recent Silver Parquet file for a domain / name prefix.
 
@@ -95,9 +96,7 @@ def read_latest_silver(domain: str, name_prefix: str) -> pd.DataFrame:
     pattern: str = f"{name_prefix}_*.parquet"
 
     candidates: list[Path] = sorted(
-        p
-        for p in search_dir.glob(pattern)
-        if not p.name.endswith(".parquet.tmp")
+        p for p in search_dir.glob(pattern) if not p.name.endswith(".parquet.tmp")
     )
 
     if not candidates:
@@ -122,6 +121,7 @@ def read_latest_silver(domain: str, name_prefix: str) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Gold writer
 # ---------------------------------------------------------------------------
+
 
 def write_gold(df: pd.DataFrame, subdir: str, name: str) -> Path:
     """Write a Gold DataFrame to ``data/gold/{subdir}/{name}.parquet``.
@@ -178,6 +178,7 @@ def write_gold(df: pd.DataFrame, subdir: str, name: str) -> Path:
 # Referential integrity checker
 # ---------------------------------------------------------------------------
 
+
 def check_referential_integrity(
     fact_df: pd.DataFrame,
     dim_df: pd.DataFrame,
@@ -230,6 +231,7 @@ def check_referential_integrity(
 # ---------------------------------------------------------------------------
 # Surrogate key assignment
 # ---------------------------------------------------------------------------
+
 
 def assign_surrogate_keys(
     df: pd.DataFrame,

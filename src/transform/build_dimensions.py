@@ -84,6 +84,7 @@ _CURRENCY_NAMES: Final[dict[str, str]] = {
 # dim_date
 # ---------------------------------------------------------------------------
 
+
 def build_dim_date(
     start_date: str | None = None,
     end_date: str | None = None,
@@ -157,6 +158,7 @@ def build_dim_date(
 # dim_customer
 # ---------------------------------------------------------------------------
 
+
 def build_dim_customer() -> pd.DataFrame:
     """Build and write the customer dimension (SCD Type 1).
 
@@ -175,14 +177,16 @@ def build_dim_customer() -> pd.DataFrame:
     raw: pd.DataFrame = read_latest_bronze_parquet(BRONZE_DB / "customers")
 
     # Select and rename to canonical Gold schema.
-    df: pd.DataFrame = raw[[
-        "customer_id",
-        "customer_code",
-        "zip_code_prefix",
-        "city",
-        "state",
-        "is_active",
-    ]].copy()
+    df: pd.DataFrame = raw[
+        [
+            "customer_id",
+            "customer_code",
+            "zip_code_prefix",
+            "city",
+            "state",
+            "is_active",
+        ]
+    ].copy()
 
     # Drop rows missing the business key — these cannot be joined to facts.
     null_key_mask: pd.Series = df["customer_code"].isna()
@@ -196,10 +200,7 @@ def build_dim_customer() -> pd.DataFrame:
 
     # SCD Type 1: keep the last occurrence of each business key.
     before: int = len(df)
-    df = (
-        df.drop_duplicates(subset=["customer_code"], keep="last")
-        .reset_index(drop=True)
-    )
+    df = df.drop_duplicates(subset=["customer_code"], keep="last").reset_index(drop=True)
     dupes_dropped: int = before - len(df)
     if dupes_dropped > 0:
         logger.info(
@@ -218,6 +219,7 @@ def build_dim_customer() -> pd.DataFrame:
 # dim_product
 # ---------------------------------------------------------------------------
 
+
 def build_dim_product() -> pd.DataFrame:
     """Build and write the product dimension (SCD Type 1).
 
@@ -235,14 +237,16 @@ def build_dim_product() -> pd.DataFrame:
 
     raw: pd.DataFrame = read_latest_bronze_parquet(BRONZE_DB / "products")
 
-    df: pd.DataFrame = raw[[
-        "product_id",
-        "product_code",
-        "category_name_en",
-        "category_name_pt",
-        "weight_g",
-        "is_active",
-    ]].copy()
+    df: pd.DataFrame = raw[
+        [
+            "product_id",
+            "product_code",
+            "category_name_en",
+            "category_name_pt",
+            "weight_g",
+            "is_active",
+        ]
+    ].copy()
 
     # Ensure weight_g is float (nullable).
     df["weight_g"] = pd.to_numeric(df["weight_g"], errors="coerce")
@@ -259,10 +263,7 @@ def build_dim_product() -> pd.DataFrame:
 
     # SCD Type 1: keep the last occurrence of each business key.
     before: int = len(df)
-    df = (
-        df.drop_duplicates(subset=["product_code"], keep="last")
-        .reset_index(drop=True)
-    )
+    df = df.drop_duplicates(subset=["product_code"], keep="last").reset_index(drop=True)
     dupes_dropped: int = before - len(df)
     if dupes_dropped > 0:
         logger.info(
@@ -281,6 +282,7 @@ def build_dim_product() -> pd.DataFrame:
 # dim_store
 # ---------------------------------------------------------------------------
 
+
 def build_dim_store() -> pd.DataFrame:
     """Build and write the store dimension (SCD Type 1).
 
@@ -297,15 +299,17 @@ def build_dim_store() -> pd.DataFrame:
 
     raw: pd.DataFrame = read_latest_bronze_parquet(BRONZE_DB / "stores")
 
-    df: pd.DataFrame = raw[[
-        "store_id",
-        "store_code",
-        "zip_code_prefix",
-        "city",
-        "state",
-        "region",
-        "is_active",
-    ]].copy()
+    df: pd.DataFrame = raw[
+        [
+            "store_id",
+            "store_code",
+            "zip_code_prefix",
+            "city",
+            "state",
+            "region",
+            "is_active",
+        ]
+    ].copy()
 
     # Drop rows missing the business key.
     null_key_mask: pd.Series = df["store_code"].isna()
@@ -319,10 +323,7 @@ def build_dim_store() -> pd.DataFrame:
 
     # SCD Type 1: keep the last occurrence of each business key.
     before: int = len(df)
-    df = (
-        df.drop_duplicates(subset=["store_code"], keep="last")
-        .reset_index(drop=True)
-    )
+    df = df.drop_duplicates(subset=["store_code"], keep="last").reset_index(drop=True)
     dupes_dropped: int = before - len(df)
     if dupes_dropped > 0:
         logger.info(
@@ -340,6 +341,7 @@ def build_dim_store() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # dim_currency
 # ---------------------------------------------------------------------------
+
 
 def build_dim_currency() -> pd.DataFrame:
     """Build and write the currency dimension derived from Silver sources.
@@ -363,9 +365,7 @@ def build_dim_currency() -> pd.DataFrame:
 
     # Collect codes from Silver orders.
     orders_df: pd.DataFrame = read_latest_silver("sales", "orders")
-    order_codes: set[str] = set(
-        orders_df["currency_code"].dropna().unique()
-    )
+    order_codes: set[str] = set(orders_df["currency_code"].dropna().unique())
     logger.info(
         "dim_currency: {:,} unique code(s) from Silver orders",
         len(order_codes),
@@ -373,9 +373,8 @@ def build_dim_currency() -> pd.DataFrame:
 
     # Collect codes from Silver FX rates.
     fx_df: pd.DataFrame = read_latest_silver("fx", "fx_rates")
-    fx_codes: set[str] = (
-        set(fx_df["base_currency"].dropna().unique())
-        | set(fx_df["quote_currency"].dropna().unique())
+    fx_codes: set[str] = set(fx_df["base_currency"].dropna().unique()) | set(
+        fx_df["quote_currency"].dropna().unique()
     )
     logger.info(
         "dim_currency: {:,} unique code(s) from Silver FX rates",
@@ -387,16 +386,13 @@ def build_dim_currency() -> pd.DataFrame:
 
     if not all_codes:
         logger.warning(
-            "dim_currency: no currency codes found in Silver; "
-            "writing empty dimension"
+            "dim_currency: no currency codes found in Silver; " "writing empty dimension"
         )
 
     df: pd.DataFrame = pd.DataFrame({"currency_code": all_codes})
 
     # Map known codes to human-readable names; fall back to the code itself.
-    df["currency_name"] = df["currency_code"].map(
-        lambda code: _CURRENCY_NAMES.get(code, code)
-    )
+    df["currency_name"] = df["currency_code"].map(lambda code: _CURRENCY_NAMES.get(code, code))
 
     df = assign_surrogate_keys(df, "currency_key")
 
@@ -408,6 +404,7 @@ def build_dim_currency() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Orchestration entry point
 # ---------------------------------------------------------------------------
+
 
 def run() -> dict[str, pd.DataFrame]:
     """Build all five Gold dimension tables in dependency order.
@@ -438,10 +435,7 @@ def run() -> dict[str, pd.DataFrame]:
     results["dim_currency"] = build_dim_currency()
 
     # Summary log so operators can confirm row counts at a glance.
-    summary_lines: list[str] = [
-        f"  {name}: {len(df):,} rows"
-        for name, df in results.items()
-    ]
+    summary_lines: list[str] = [f"  {name}: {len(df):,} rows" for name, df in results.items()]
     logger.info(
         "=== Stage 4 complete. Dimension row counts ===\n{}",
         "\n".join(summary_lines),
