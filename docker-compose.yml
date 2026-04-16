@@ -14,7 +14,7 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - etl_pgdata:/var/lib/postgresql/data
       # 00_init.sql runs only on first start (empty volume).
@@ -68,9 +68,11 @@ services:
     env_file:
       - .env
     environment:
-      # Override DB_HOST so the pipeline reaches Postgres via the Docker
-      # internal network rather than attempting to connect to localhost.
+      # Override DB_HOST and DB_PORT so the pipeline reaches Postgres via the
+      # Docker internal network. The 5433:5432 port mapping only applies on the
+      # host — inside the network Postgres always listens on 5432.
       DB_HOST: etl-postgres
+      DB_PORT: 5432
     depends_on:
       etl-postgres:
         condition: service_healthy

@@ -104,17 +104,16 @@ def load_dimension(
     )
 
     # Disable FK trigger checks, truncate, re-enable — single connection/txn.
-    # session_replication_role is a session-level setting that cannot be rolled
-    # back transactionally, so a finally block guarantees it is always reset to
-    # 'origin' before the connection is returned to the pool, even if TRUNCATE
-    # raises (e.g., lock timeout).
+    # session_replication_role is a session-level setting; it resets automatically
+    # when the connection is closed, so no finally block is needed. Running
+    # SET ORIGIN inside a finally block would mask the real TRUNCATE error if the
+    # transaction were already aborted.
+    # CASCADE handles any FK references from fact tables loaded in prior runs.
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SET session_replication_role = 'replica'")
-            try:
-                cur.execute(f"TRUNCATE analytics.{table} RESTART IDENTITY")
-            finally:
-                cur.execute("SET session_replication_role = 'origin'")
+            cur.execute(f"TRUNCATE analytics.{table} RESTART IDENTITY CASCADE")
+            cur.execute("SET session_replication_role = 'origin'")
 
     # Bulk insert via SQLAlchemy (separate connection from the pool).
     df.to_sql(

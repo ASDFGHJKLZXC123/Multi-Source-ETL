@@ -72,8 +72,7 @@ END;
 $$;
 
 -- Allow the role to connect to the target database.
--- Replace <your_database> with the actual database name.
-GRANT CONNECT ON DATABASE "<your_database>" TO powerbi_reader;
+GRANT CONNECT ON DATABASE etl_pipeline TO powerbi_reader;
 
 -- Allow the role to see objects in the analytics schema.
 GRANT USAGE ON SCHEMA analytics TO powerbi_reader;

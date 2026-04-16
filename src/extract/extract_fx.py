@@ -176,20 +176,32 @@ def _fetch_fx_timeseries(
             logger.error("Frankfurter API error for chunk {}-{}: {}", chunk_start.date(), chunk_end.date(), exc)
             raise
 
-        # Frankfurter v2 time-series response:
+        # Frankfurter v2 time-series response — two known shapes:
+        #
+        # Shape A (dict, older behaviour):
         #   {"rates": {"2016-09-01": {"BRL": 3.24}, ...}}
-        # When only one quote currency is requested the inner value is a dict
-        # with a single key.  Handle both nested-dict and flat-float forms for
-        # robustness across API versions.
-        rates_chunk = payload.get("rates", {})
-        for date_str, value in rates_chunk.items():
-            if isinstance(value, dict):
-                # Nested form: {"BRL": 3.24}
-                if quote in value:
-                    all_rates[date_str] = float(value[quote])
-            elif value is not None:
-                # Flat form: 3.24  (single-quote requests on some API versions)
-                all_rates[date_str] = float(value)
+        #
+        # Shape B (list, current v2 behaviour):
+        #   [{"date": "2016-09-01", "base": "USD", "quote": "BRL", "rate": 3.23}, ...]
+        #
+        if isinstance(payload, list):
+            # Shape B — list of daily objects with a flat "rate" field
+            for item in payload:
+                if not isinstance(item, dict):
+                    continue
+                date_str = item.get("date")
+                rate = item.get("rate")
+                if date_str and rate is not None:
+                    all_rates[date_str] = float(rate)
+        else:
+            # Shape A — dict keyed by date
+            rates_chunk = payload.get("rates", {})
+            for date_str, value in rates_chunk.items():
+                if isinstance(value, dict):
+                    if quote in value:
+                        all_rates[date_str] = float(value[quote])
+                elif value is not None:
+                    all_rates[date_str] = float(value)
 
         chunk_start = chunk_end + pd.Timedelta(days=1)
 
