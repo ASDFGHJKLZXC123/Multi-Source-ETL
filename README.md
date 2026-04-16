@@ -183,109 +183,64 @@ halting immediately.
 
 ## Quick Start
 
+Both options require **Docker Desktop** (or Docker Engine + Compose v2) for PostgreSQL.
+Choose the run mode that suits you:
+
+| | Option A — Local Python | Option B — Docker (no Python install) |
+|---|---|---|
+| **Requires** | Python 3.10+, Docker | Docker only |
+| **Run command** | `make full-refresh` | `make docker-run` |
+| **Best for** | Development, debugging | Reproducible / CI runs |
+
+### Step 1 — Clone and configure (both options)
+
 ```bash
-# 1. Clone and enter the project directory
 git clone <repo-url> "Multi-Source ETL"
 cd "Multi-Source ETL"
 
-# 2. Create and activate a virtual environment
+cp .env.example .env
+# Edit .env — fill in three values:
+#   DB_PASSWORD    your chosen Postgres password
+#   KAGGLE_USERNAME  your Kaggle account name
+#   KAGGLE_KEY       your Kaggle API key (kaggle.com/settings → API)
+```
+
+### Step 2A — Local Python
+
+```bash
 python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+make install                     # pip install -r requirements.txt
 
-# 3. Install dependencies
-make install                       # pip install -r requirements.txt
+make db-up                       # start PostgreSQL in Docker
+make db-status                   # wait until etl-postgres shows "healthy"
+make smoke-test                  # verify DB connectivity
 
-# 4. Configure environment variables
-cp .env.example .env
-# Open .env and fill in: DB_PASSWORD, KAGGLE_USERNAME, KAGGLE_KEY
-
-# 5. Start PostgreSQL
-make db-up                         # docker compose up -d
-make db-status                     # wait until etl-postgres shows "healthy"
-
-# 6. Verify connectivity
-make smoke-test                    # runs scripts/test_db_connection.py
-
-# 7. Initialize schemas and load source data
-make init                          # create PostgreSQL schemas
-make setup                         # download Olist CSVs + load source_system
-
-# 8. Run the full pipeline
-make full-refresh                  # extract → silver → gold → warehouse → quality
-
-# 9. Monitor logs
-make logs                          # tail -f logs/etl.log
+make init                        # create schemas
+make setup                       # download Olist CSVs and load source_system
+make full-refresh                # extract → silver → gold → warehouse → quality
+make logs                        # tail -f logs/etl.log
 ```
 
----
-
-## Docker Quick Start (Fully Containerised)
-
-Run the entire stack — PostgreSQL and the ETL pipeline — without installing Python
-dependencies locally.  Requires only Docker Desktop (or Docker Engine + Compose v2).
+### Step 2B — Fully containerised
 
 ```bash
-# 1. Clone and enter the project directory
-git clone <repo-url> "Multi-Source ETL"
-cd "Multi-Source ETL"
+make docker-build                # build the etl-pipeline image
 
-# 2. Configure environment variables
-cp .env.example .env
-# Open .env and fill in: DB_PASSWORD, KAGGLE_USERNAME, KAGGLE_KEY
-# DB_HOST stays as localhost — docker-compose.yml overrides it automatically.
+make db-up                       # start PostgreSQL
+make db-status                   # wait until etl-postgres shows "healthy"
 
-# 3. Build the pipeline image
-make docker-build
+docker compose run --rm etl-pipeline --stage init    # create schemas
+docker compose run --rm etl-pipeline --stage setup   # load source data
 
-# 4. Start PostgreSQL (stays running between pipeline invocations)
-make db-up
-make db-status    # wait until etl-postgres shows "healthy"
-
-# 5. Initialise the database schemas
-docker compose run --rm etl-pipeline --stage init
-docker compose run --rm etl-pipeline --stage setup
-
-# 6. Run the full pipeline
-make docker-run   # equivalent: docker compose run --rm etl-pipeline --full-refresh
-
-# 7. Check the logs (written to ./logs/ on the host)
-make logs
-
-# 8. Tear down when done
-make db-down      # stops Postgres (preserves data)
-# make db-reset   # wipe all data and start fresh
+make docker-run                  # run the full pipeline
+make logs                        # check logs/etl.log on the host
+make db-down                     # stop Postgres when done (data is preserved)
 ```
 
-### Containerised single-stage execution
-
-```bash
-docker compose run --rm etl-pipeline --stage extract
-docker compose run --rm etl-pipeline --stage silver
-docker compose run --rm etl-pipeline --stage gold
-docker compose run --rm etl-pipeline --stage warehouse
-docker compose run --rm etl-pipeline --stage quality
-docker compose run --rm etl-pipeline --incremental
-```
-
-### Why `docker compose run` instead of `docker compose up`
-
-`docker compose run --rm` is the correct pattern for a batch ETL:
-- Starts `depends_on` services (Postgres, with `service_healthy` respected) if not already running.
-- Runs the pipeline to completion, then removes the container.
-- Returns the pipeline's exit code — non-zero exits fail `make` targets cleanly.
-- Does not attempt to keep the container alive or restart it after the job finishes.
-
-The `etl-pipeline` service is tagged `profiles: [pipeline]` in `docker-compose.yml` so
-that a bare `docker compose up` starts only Postgres — the pipeline container is opt-in.
-
-### DB_HOST — local vs. containerised
-
-| Mode | DB_HOST value | How it is set |
-|------|--------------|---------------|
-| Local Python (`python main.py`) | `localhost` | `.env` default |
-| Containerised (`docker compose run`) | `etl-postgres` | `environment:` override in `docker-compose.yml` |
-
-No manual change to `.env` is required when switching between modes.
+> **DB_HOST note:** `.env` keeps `DB_HOST=localhost` for local runs. When using
+> `docker compose run`, the Compose file automatically overrides it to `etl-postgres`.
+> No manual change is needed when switching between options.
 
 ---
 
@@ -453,16 +408,20 @@ Multi-Source ETL/
 │   ├── stage8_powerbi.md            # Power BI connection plan + semantic model design
 │   ├── stage9_dax_measures.md       # 27 DAX measures with format strings + rationale
 │   ├── stage10_dashboard_pages.md   # 4-page dashboard design spec + accessibility guide
-│   ├── stage14_interview_prep.md    # Resume bullet, project summary, 6 interview Q&A
 │   └── POWER_BI_SEMANTIC_MODEL_DESIGN.md
 │
 ├── pbix/                            # Power BI Desktop files (excluded from git)
 ├── notebooks/                       # Jupyter exploration notebooks
 ├── logs/                            # Rotating etl.log (excluded from git)
 └── tests/
-    ├── test_validators.py           # Unit tests for normalize_city_name, validate_dataframe
-    ├── test_transforms.py           # Transform logic unit tests
-    └── test_db_connection.py        # Connectivity checks (skipped if no DB)
+    ├── conftest.py                  # Shared pytest fixtures (minimal_orders_df, minimal_fx_df, minimal_weather_df)
+    ├── test_transforms.py           # Silver transform logic: orders, weather, FX (14 tests)
+    ├── test_validators.py           # normalize_city_name, validate_dataframe, DQ report (16 tests)
+    ├── test_gold_utils.py           # assign_surrogate_keys, check_referential_integrity (12 tests)
+    ├── test_silver_utils.py         # write_silver, quarantine_rows, read_latest_bronze_parquet (19 tests)
+    ├── test_schemas.py              # Pandera schema validation via validate_silver (22 tests)
+    ├── test_transform_functions.py  # Full transform functions with mocked I/O (12 tests)
+    └── test_db_connection.py        # PostgreSQL connectivity checks (3 tests; skipped if no DB)
 ```
 
 ---
@@ -483,20 +442,22 @@ Multi-Source ETL/
 | FX cross-rate derivation | `src/transform/transform_fx.py` | Computes BRL/USD as (EUR/BRL) ÷ (EUR/USD) because Frankfurter publishes only EUR-base pairs; joins by date to every order-item |
 | Structured logging | `src/utils/logger.py` | loguru with dual sinks: INFO+ to stdout (colored), DEBUG+ to rotating file (10 MB, 7-day retention); lazy string interpolation |
 | Power BI model + DAX | `docs/stage9_dax_measures.md`, `docs/stage10_dashboard_pages.md` | 27 DAX measures across 6 display folders, Import-mode star schema with role-playing currency dimension, 4-page dashboard with accessibility spec |
+| Containerisation | `Dockerfile`, `docker-compose.yml` | Multi-stage Docker build (deps layer + slim runtime, non-root user); Compose profiles so `db-up` starts only Postgres and `docker compose run` opts in the pipeline; DB_HOST override pattern eliminates `.env` edits between modes |
+| Testing & CI | `tests/`, `.github/workflows/ci.yml` | 98 tests (95 pure unit) covering transform logic, schema contracts, utility I/O, and Gold helpers; pandera and mocked I/O boundaries; pytest-cov with 60% branch-coverage gate; GitHub Actions matrix on Python 3.10–3.12 with ruff, black, mypy, and Codecov |
 
 ---
 
-## Stage Reference
+## Pipeline Stage Reference
 
-| Stage | Command | Description |
-|-------|---------|-------------|
-| 0a — init | `--stage init` | Create PostgreSQL schemas and `pipeline_metadata` table |
-| 0b — setup | `--stage setup` | Download Olist CSVs from Kaggle, create `source_system` schema, load all 9 tables |
-| 1 — extract | `--stage extract` | Pull Open-Meteo weather (20 cities), Frankfurter FX rates, and municipalities CSV; snapshot `source_system` to Bronze Parquet |
-| 3 — silver | `--stage silver` | Transform Bronze → Silver: type-cast, deduplicate, validate with pandera, quarantine invalid rows |
-| 4 — gold | `--stage gold` | Build 5 Gold dimension tables and 3 Gold fact tables from Silver Parquet |
-| 5 — warehouse | `--stage warehouse` | Load Gold Parquet into PostgreSQL `analytics` schema (dims: truncate+reload; facts: upsert) |
-| 7 — quality | `--stage quality` | Run automated quality checks against `analytics.*` tables; persist results to `data_quality_log` |
+| `--stage` value | Description |
+|-----------------|-------------|
+| `init` | Create PostgreSQL schemas and `pipeline_metadata` table |
+| `setup` | Download Olist CSVs from Kaggle, create `source_system` schema, load all 9 tables |
+| `extract` | Pull Open-Meteo weather (20 cities), Frankfurter FX rates, and municipalities CSV; snapshot `source_system` to Bronze Parquet |
+| `silver` | Transform Bronze → Silver: type-cast, deduplicate, validate with pandera, quarantine invalid rows |
+| `gold` | Build 5 Gold dimension tables and 3 Gold fact tables from Silver Parquet |
+| `warehouse` | Load Gold Parquet into PostgreSQL `analytics` schema (dims: truncate+reload; facts: upsert) |
+| `quality` | Run automated quality checks against `analytics.*` tables; persist results to `data_quality_log` |
 
 ---
 
@@ -528,14 +489,15 @@ pytest tests/test_transforms.py::TestTransformFx::test_forward_fill_missing_date
 
 | File | Scope | Tests |
 |------|-------|-------|
-| `tests/test_transforms.py` | Inline transform logic (sales, weather, FX) | 13 |
-| `tests/test_validators.py` | `normalize_city_name`, `validate_dataframe`, DQ report | 13 |
+| `tests/test_transforms.py` | Silver transform logic — orders, weather, FX | 14 |
+| `tests/test_validators.py` | `normalize_city_name`, `validate_dataframe`, DQ report | 16 |
 | `tests/test_gold_utils.py` | `assign_surrogate_keys`, `check_referential_integrity` | 12 |
-| `tests/test_silver_utils.py` | `write_silver`, `quarantine_rows`, `read_latest_bronze_parquet`, `log_transform_summary` | 14 |
-| `tests/test_schemas.py` | Pandera schema validation via `validate_silver` | 21 |
+| `tests/test_silver_utils.py` | `write_silver`, `quarantine_rows`, `read_latest_bronze_parquet`, `log_transform_summary` | 19 |
+| `tests/test_schemas.py` | Pandera schema validation via `validate_silver` | 22 |
 | `tests/test_transform_functions.py` | Full transform functions with mocked I/O | 12 |
+| `tests/test_db_connection.py` | PostgreSQL connectivity (skipped without a live DB) | 3 |
 
-**Total: ~85 tests.** All tests are pure unit tests — no database, no network, no Parquet files on disk required.
+**Total: 98 tests (95 pure unit + 3 DB integration).** Unit tests require no database, network, or Parquet files on disk.
 
 ### Coverage target
 
@@ -628,7 +590,6 @@ See [`docs/stage8_powerbi.md`](docs/stage8_powerbi.md) for the full connection g
 - **dbt for Silver/Gold transforms**: Current pandas transforms are functional but lack SQL-based lineage and test visibility. Migrating to dbt would enable automated doc generation and tighter integration with a modern data warehouse.
 - **Geolocation enrichment**: The Olist geolocation CSV (zip_code_prefix → latitude/longitude) is currently underused. Enriching dimension tables with coordinates enables geographic clustering, heatmap visualizations, and distance-based delivery cost analysis.
 - **Review score Gold layer**: Review data is quarantined in Silver due to quality concerns. A validated `fact_reviews` table would unlock customer satisfaction analytics linked to seller and product dimensions.
-- **Automated CI pipeline**: GitHub Actions running `pytest`, pandera schema checks, and data quality validation on every commit would catch regressions before they reach production. Add pre-commit hooks for ruff + black + mypy.
 - **DirectQuery mode for Power BI**: Provisioning a production PostgreSQL instance with read replicas would allow Power BI DirectQuery, enabling real-time dashboards without a re-import refresh cycle.
 
 ---
