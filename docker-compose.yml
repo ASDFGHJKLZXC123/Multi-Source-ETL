@@ -1,0 +1,94 @@
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — persistent analytics database
+  # ---------------------------------------------------------------------------
+  etl-postgres:
+    image: postgres:16-alpine
+    container_name: etl-postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - etl_pgdata:/var/lib/postgresql/data
+      # 00_init.sql runs only on first start (empty volume).
+      # Creates source_system + analytics schemas and pipeline_metadata.
+      - ./sql/ddl/00_init.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+    networks:
+      - etl-network
+    # Tuned for the batch workload (~100k-150k rows).
+    # shared_buffers / work_mem / maintenance_work_mem improve bulk-load
+    # and index-build throughput during --stage setup and --stage warehouse.
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c work_mem=16MB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c max_connections=20
+      -c effective_cache_size=512MB
+      -c random_page_cost=1.1
+    healthcheck:
+      # SQL probe — confirms PostgreSQL has finished initdb and is ready for
+      # queries, not just accepting TCP connections (as pg_isready would report).
+      test: ["CMD-SHELL", "psql -U ${DB_USER} -d ${DB_NAME} -c 'SELECT 1' -q --no-psqlrc > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # ETL pipeline — batch runner (opt-in via --profile pipeline)
+  # ---------------------------------------------------------------------------
+  # Usage:
+  #   make docker-run                                   # full refresh
+  #   make docker-run-incremental                       # incremental
+  #   docker compose run --rm etl-pipeline --stage silver
+  #
+  # This service is tagged with profiles: [pipeline] so that:
+  #   docker compose up       → starts only etl-postgres (normal dev workflow)
+  #   docker compose run etl-pipeline  → starts postgres (if needed) + pipeline
+  #
+  # DB_HOST is overridden to the Compose service name.  The .env default
+  # (localhost) is correct for local Python dev; etl-postgres is correct
+  # inside the Docker network.
+  etl-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: etl-pipeline
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      # Override DB_HOST so the pipeline reaches Postgres via the Docker
+      # internal network rather than attempting to connect to localhost.
+      DB_HOST: etl-postgres
+    depends_on:
+      etl-postgres:
+        condition: service_healthy
+    volumes:
+      # Bind-mount data/ and logs/ so pipeline outputs persist on the host
+      # after the container exits and can be inspected or re-used across runs.
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - etl-network
+    profiles:
+      - pipeline
+
+volumes:
+  etl_pgdata:
+    name: etl_pgdata
+
+networks:
+  etl-network:
+    name: etl-network
+    driver: bridge

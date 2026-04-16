@@ -1,0 +1,60 @@
+# ── Secrets & environment ──────────────────────────────────────────────────
+.env
+*.env
+kaggle.json
+~/.kaggle/
+
+# ── Python ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+
+# ── Testing & coverage ─────────────────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# ── Data layer (track structure via .gitkeep, not content) ─────────────────
+/data/
+!data/**/.gitkeep
+
+# ── Logs ───────────────────────────────────────────────────────────────────
+/logs/
+!logs/.gitkeep
+
+# ── Power BI ───────────────────────────────────────────────────────────────
+*.pbix
+/pbix/
+!pbix/.gitkeep
+
+# ── Jupyter ────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+# NOTE: .ipynb files ARE tracked (do not ignore *.ipynb)
+
+# ── Databases ──────────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── macOS ──────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── IDEs ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,34 @@
+# docker-compose.override.yml — local development only
+#
+# This file is automatically merged by `docker compose` when present.
+# It is intentionally excluded from production deployments.
+# Add it to .gitignore if your team does not want it tracked, or keep it
+# tracked as a shared convenience for local dev.
+#
+# Provides:
+#   - pgAdmin 4 on http://localhost:5050
+#     Default login: admin@etl.local / admin  (change PGADMIN_DEFAULT_PASSWORD below)
+
+services:
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: etl-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@etl.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - etl_pgadmin:/var/lib/pgadmin
+    networks:
+      - etl-network
+    depends_on:
+      etl-postgres:
+        condition: service_healthy
+
+volumes:
+  etl_pgadmin:
+    name: etl_pgadmin

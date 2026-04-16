@@ -1,0 +1,684 @@
+# Multi-Source ETL Pipeline — Brazilian E-Commerce Analytics
+
+A production-grade data engineering portfolio project integrating three independent data
+sources — Kaggle's Olist Brazilian e-commerce dataset (99,441 orders / 112,650 order
+line items), Open-Meteo historical weather (20 cities, ERA5), and Frankfurter FX rates
+(daily USD/BRL) — into a unified PostgreSQL analytics warehouse via the medallion
+architecture. Bronze preserves raw Parquet snapshots; Silver enforces pandera schema
+contracts with quarantine routing for invalid rows; Gold materialises a star schema
+(3 facts, 5 dims) in both Parquet and PostgreSQL. The pipeline ships with Docker
+Compose for one-command deployment, a 95-test pytest suite across a Python 3.10–3.12
+CI matrix on GitHub Actions, and a 4-page Power BI dashboard with 27 DAX measures.
+
+**All 14 build stages are complete and production-ready.**
+
+---
+
+## Business Questions Answered
+
+- **Which Brazilian states generate the highest order revenue, and how do seasonal and regional factors influence purchasing patterns?** Order history is joined with geographic dimensions for state-level revenue analysis, category breakdowns, and time-series trending.
+- **Does adverse weather correlate with order volume volatility or increased delivery failures?** Weather facts are joined daily to orders by city, enabling analysis of temperature, precipitation, and wind conditions against order placement and on-time delivery rates.
+- **How does USD/BRL exchange rate volatility impact reported revenue when normalized to a standard currency?** FX rates are joined by order date to every order-item, enabling native-BRL reporting alongside USD-normalized comparisons.
+- **Which product categories drive the highest freight costs relative to item value, and how does this vary by delivery region?** Line-item facts include unit price, freight cost, and product-to-geography foreign keys for margin and cost analysis.
+- **What is the relationship between actual delivery speed and customer satisfaction?** The pipeline calculates days-to-deliver and on-time delivery flags, available for correlation with product and seller metrics.
+- **Which sellers have the highest on-time delivery rates by state, and how do their performance metrics compare to peers?** Order-item facts include seller geography and delivery performance flags, enabling seller scorecard analysis.
+
+---
+
+## Architecture
+
+### Pipeline Data Flow
+
+```
+┌──────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
+│  Olist CSVs      │  │  Open-Meteo API      │  │  Frankfurter API     │  │  Municipalities CSV  │
+│  (Kaggle)        │  │  (no key required)   │  │  (no key required)   │  │  (GitHub)            │
+└────────┬─────────┘  └──────────┬───────────┘  └──────────┬───────────┘  └──────────┬───────────┘
+         │                       │                          │                          │
+         └───────────────────────┴──────────────────────────┴──────────────────────────┘
+                                                    │
+                                                    ▼
+                              ┌─────────────────────────────────────────┐
+                              │               BRONZE LAYER               │
+                              │                                          │
+                              │  data/bronze/          (Parquet)         │
+                              │  PostgreSQL: source_system schema        │
+                              │                                          │
+                              │  • Raw DB snapshot (9 Olist tables)      │
+                              │  • Weather records (ERA5 via Open-Meteo) │
+                              │  • FX rates (ECB data via Frankfurter)   │
+                              │  • Municipalities flat file              │
+                              └─────────────────┬───────────────────────┘
+                                                │
+                                                ▼
+                              ┌─────────────────────────────────────────┐
+                              │               SILVER LAYER               │
+                              │                                          │
+                              │  data/silver/          (Parquet)         │
+                              │  data/silver/quarantine/  (rejected rows)│
+                              │                                          │
+                              │  • Type-cast and null-checked            │
+                              │  • Deduplicated; pandera schema enforced │
+                              │  • Invalid rows isolated to quarantine/  │
+                              └─────────────────┬───────────────────────┘
+                                                │
+                                                ▼
+                              ┌─────────────────────────────────────────┐
+                              │               GOLD LAYER                 │
+                              │                                          │
+                              │  data/gold/            (Parquet)         │
+                              │  PostgreSQL: analytics schema            │
+                              │                                          │
+                              │  Dimensions (5)                          │
+                              │    dim_date · dim_customer               │
+                              │    dim_product · dim_store               │
+                              │    dim_currency                          │
+                              │                                          │
+                              │  Facts (3)                               │
+                              │    fact_sales (grain: order line item)   │
+                              │    fact_weather_daily (grain: city+date) │
+                              │    fact_fx_rates (grain: date+ccy pair)  │
+                              └─────────────────┬───────────────────────┘
+                                                │
+                                                ▼
+                              ┌─────────────────────────────────────────┐
+                              │            CONSUMPTION LAYER             │
+                              │                                          │
+                              │  Power BI Desktop (Import mode)          │
+                              │  4 report pages · 27 DAX measures        │
+                              └─────────────────────────────────────────┘
+```
+
+### Gold Layer — Star Schema
+
+`fact_sales` is the primary fact table. `fact_weather_daily` and `fact_fx_rates` are
+independent conformed facts that share `dim_date` and `dim_currency`.
+
+```
+                         ┌──────────────────┐
+                         │    dim_date       │
+                         │──────────────────│
+                         │ date_key INT PK   │◄─────────────────────────┐
+                         │   (YYYYMMDD)      │◄──────────┐              │
+                         └──────────────────┘           │              │
+                                                        │              │
+┌─────────────────┐   ┌────────────────────────────────┐│  ┌───────────────────────────┐
+│  dim_customer   │   │          fact_sales             ││  │   fact_weather_daily      │
+│─────────────────│   │────────────────────────────────││  │───────────────────────────│
+│ customer_key PK │◄──│ customer_key     FK             ││  │ date_key      FK ─────────┘
+└─────────────────┘   │ product_key      FK             ││  │ city                      │
+                      │ store_key        FK             ││  │ state                     │
+┌─────────────────┐   │ currency_key     FK             │└──│ temp_max                  │
+│  dim_product    │   │ date_key         FK ────────────┘   │ temp_min                  │
+│─────────────────│   │                                     │ precipitation             │
+│ product_key  PK │◄──│ order_item_id    PK                 │ windspeed                 │
+└─────────────────┘   │ Grain: order line item              │ weathercode               │
+                      │ ~112,650 rows                       └───────────────────────────┘
+┌─────────────────┐   └────────────────────────────────┐
+│   dim_store     │                                    │   ┌───────────────────────────┐
+│─────────────────│                                    │   │      fact_fx_rates         │
+│ store_key    PK │◄──── fact_sales.store_key          │   │───────────────────────────│
+└─────────────────┘                                    │   │ date_key      FK ──────────┘
+                                                        │   │ base_currency_key  FK      │
+┌─────────────────┐                                    │   │ quote_currency_key FK      │
+│  dim_currency   │                                    │   │ base_currency              │
+│─────────────────│                                    │   │ quote_currency             │
+│ currency_key PK │◄──── fact_sales.currency_key       │   │ rate                       │
+│                 │◄──── fact_fx_rates.base/quote_key  │   └───────────────────────────┘
+└─────────────────┘
+```
+
+> **`dim_date` key:** `date_key` is an `INT` in `YYYYMMDD` format (e.g. `20171125`),
+> not a native `DATE` type. All three fact tables join to `dim_date` on this integer key.
+
+### Orchestration Modes
+
+| Mode | Flag | Stages executed | When to use |
+|------|------|-----------------|-------------|
+| **Full refresh** | `--full-refresh` | `extract → silver → gold → warehouse → quality` | First run or when source data has changed |
+| **Incremental** | `--incremental` | `silver → gold → warehouse → quality` | Bronze Parquet is current; skip re-extraction |
+| **Single stage** | `--stage <name>` | Exactly one named stage | Debugging or re-running a specific step |
+
+Available `--stage` names: `init`, `setup`, `extract`, `load`, `silver`, `gold`, `warehouse`, `quality`.
+
+Pass `--no-fail-fast` to continue executing remaining stages after a failure instead of
+halting immediately.
+
+---
+
+## Tech Stack
+
+| Component | Technology | Version | Rationale |
+|-----------|------------|---------|-----------|
+| Runtime | Python | 3.10+ | Strong data libraries, async/sync interop, broad DevOps tooling support |
+| Data frames | pandas | 2.x | Columnar memory model, rich groupby/pivot operations, Parquet I/O via pyarrow |
+| Columnar storage | pyarrow | 14.0+ | Parquet read/write, zero-copy interchange, efficient compression |
+| Spreadsheet read | openpyxl | 3.1+ | Drop-in for pandas Excel I/O without xlrd/xlwt legacy quirks |
+| Database ORM | SQLAlchemy | 2.x | Composable Core + ORM hybrid, PEP 249 compliance, safe parameter binding |
+| PostgreSQL driver | psycopg2-binary | 2.9+ | Mature, widely audited, fast bulk inserts via COPY protocol |
+| HTTP (REST APIs) | requests | 2.31+ | Ubiquitous, simple request/response model for one-shot endpoints |
+| HTTP (HTTP/2) | httpx | 0.27+ | Async-first, connection pooling, parity with requests API |
+| Kaggle client | kagglehub | 0.2+ | Official Kaggle client, automatic credential detection, cache layer |
+| Fuzzy matching | rapidfuzz | 3.6+ | 10–100× faster than fuzzywuzzy; vectorized Rust/C backend for city-name joins |
+| Accent stripping | unicodedata2 | 15.1+ | Full Unicode 15.1 support for accent normalization before fuzzy join |
+| Data contracts | pydantic | 2.5+ | Schema contracts with field-level validators, strict mode, runtime type checks |
+| DataFrame validation | pandera | 0.18+ | Pandas-native schema validation at the Silver boundary; declarative checks |
+| Retry logic | tenacity | 8.2+ | Clean decorator API, exponential backoff with jitter, predicate-based retry filters |
+| Logging | loguru | 0.7+ | Lazy string interpolation, structured log sinks, automatic rotation and compression |
+| Progress bars | tqdm | 4.66+ | Minimal overhead, ETA calculation, integration with pandas iterators |
+| Secrets management | python-dotenv | 1.0+ | Prevents hardcoded credentials in version control; `.env` git-ignored by default |
+
+---
+
+## Data Sources
+
+| Source | Format | Volume | Auth |
+|--------|--------|--------|------|
+| Olist Brazilian E-Commerce (Kaggle) | 9 CSV files | ~99,441 orders / 112,650 items | Kaggle login (free) |
+| Open-Meteo Archive API | JSON (REST) | ~730 days × 20 cities | None |
+| Frankfurter FX API | JSON (REST) | ~550 trading days, EUR base | None |
+| Municipios Brasileiros (GitHub) | CSV | 5,570 Brazilian municipalities | None |
+
+---
+
+## Quick Start
+
+```bash
+# 1. Clone and enter the project directory
+git clone <repo-url> "Multi-Source ETL"
+cd "Multi-Source ETL"
+
+# 2. Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+
+# 3. Install dependencies
+make install                       # pip install -r requirements.txt
+
+# 4. Configure environment variables
+cp .env.example .env
+# Open .env and fill in: DB_PASSWORD, KAGGLE_USERNAME, KAGGLE_KEY
+
+# 5. Start PostgreSQL
+make db-up                         # docker compose up -d
+make db-status                     # wait until etl-postgres shows "healthy"
+
+# 6. Verify connectivity
+make smoke-test                    # runs scripts/test_db_connection.py
+
+# 7. Initialize schemas and load source data
+make init                          # create PostgreSQL schemas
+make setup                         # download Olist CSVs + load source_system
+
+# 8. Run the full pipeline
+make full-refresh                  # extract → silver → gold → warehouse → quality
+
+# 9. Monitor logs
+make logs                          # tail -f logs/etl.log
+```
+
+---
+
+## Docker Quick Start (Fully Containerised)
+
+Run the entire stack — PostgreSQL and the ETL pipeline — without installing Python
+dependencies locally.  Requires only Docker Desktop (or Docker Engine + Compose v2).
+
+```bash
+# 1. Clone and enter the project directory
+git clone <repo-url> "Multi-Source ETL"
+cd "Multi-Source ETL"
+
+# 2. Configure environment variables
+cp .env.example .env
+# Open .env and fill in: DB_PASSWORD, KAGGLE_USERNAME, KAGGLE_KEY
+# DB_HOST stays as localhost — docker-compose.yml overrides it automatically.
+
+# 3. Build the pipeline image
+make docker-build
+
+# 4. Start PostgreSQL (stays running between pipeline invocations)
+make db-up
+make db-status    # wait until etl-postgres shows "healthy"
+
+# 5. Initialise the database schemas
+docker compose run --rm etl-pipeline --stage init
+docker compose run --rm etl-pipeline --stage setup
+
+# 6. Run the full pipeline
+make docker-run   # equivalent: docker compose run --rm etl-pipeline --full-refresh
+
+# 7. Check the logs (written to ./logs/ on the host)
+make logs
+
+# 8. Tear down when done
+make db-down      # stops Postgres (preserves data)
+# make db-reset   # wipe all data and start fresh
+```
+
+### Containerised single-stage execution
+
+```bash
+docker compose run --rm etl-pipeline --stage extract
+docker compose run --rm etl-pipeline --stage silver
+docker compose run --rm etl-pipeline --stage gold
+docker compose run --rm etl-pipeline --stage warehouse
+docker compose run --rm etl-pipeline --stage quality
+docker compose run --rm etl-pipeline --incremental
+```
+
+### Why `docker compose run` instead of `docker compose up`
+
+`docker compose run --rm` is the correct pattern for a batch ETL:
+- Starts `depends_on` services (Postgres, with `service_healthy` respected) if not already running.
+- Runs the pipeline to completion, then removes the container.
+- Returns the pipeline's exit code — non-zero exits fail `make` targets cleanly.
+- Does not attempt to keep the container alive or restart it after the job finishes.
+
+The `etl-pipeline` service is tagged `profiles: [pipeline]` in `docker-compose.yml` so
+that a bare `docker compose up` starts only Postgres — the pipeline container is opt-in.
+
+### DB_HOST — local vs. containerised
+
+| Mode | DB_HOST value | How it is set |
+|------|--------------|---------------|
+| Local Python (`python main.py`) | `localhost` | `.env` default |
+| Containerised (`docker compose run`) | `etl-postgres` | `environment:` override in `docker-compose.yml` |
+
+No manual change to `.env` is required when switching between modes.
+
+---
+
+## Setup & Configuration
+
+### Environment Variables (`.env`)
+
+Copy `.env.example` to `.env` and fill in the required values. The file is git-ignored.
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `DB_HOST` | `localhost` | Yes | PostgreSQL host |
+| `DB_PORT` | `5432` | Yes | PostgreSQL port |
+| `DB_NAME` | `etl_pipeline` | Yes | Database name |
+| `DB_USER` | `postgres` | Yes | Database user |
+| `DB_PASSWORD` | — | **Yes** | Database password |
+| `KAGGLE_USERNAME` | — | **Yes** | Kaggle account username |
+| `KAGGLE_KEY` | — | **Yes** | Kaggle API key |
+| `WEATHER_PROVIDER` | `open-meteo` | No | Weather API provider |
+| `FX_PROVIDER` | `frankfurter` | No | FX rate provider |
+| `PIPELINE_START_DATE` | `2016-09-01` | No | Coverage start date |
+| `PIPELINE_END_DATE` | `2018-10-31` | No | Coverage end date |
+| `WEATHER_CITY_COUNT` | `20` | No | Top N cities to fetch weather for |
+| `FX_BASE_CURRENCY` | `USD` | No | FX base currency |
+| `FX_QUOTE_CURRENCY` | `BRL` | No | FX quote currency |
+| `LOG_LEVEL` | `INFO` | No | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
+
+### Kaggle Credentials
+
+Get your API token from [kaggle.com/settings → API → Create New Token](https://www.kaggle.com/settings).
+
+```bash
+# macOS / Linux — place kaggle.json at the expected location
+mkdir -p ~/.kaggle
+mv ~/Downloads/kaggle.json ~/.kaggle/kaggle.json
+chmod 600 ~/.kaggle/kaggle.json
+```
+
+Alternatively, set `KAGGLE_USERNAME` and `KAGGLE_KEY` directly in `.env`.
+
+### Docker (PostgreSQL)
+
+```bash
+make db-up        # Start PostgreSQL (first run mounts 00_init.sql automatically)
+make db-status    # Verify health — etl-postgres should show "healthy"
+make db-shell     # Open interactive psql session
+make db-reset     # Wipe all data and start fresh (destroys etl_pgdata volume)
+```
+
+**First-run note:** `00_init.sql` is mounted into `/docker-entrypoint-initdb.d/` and
+runs automatically only when the named volume `etl_pgdata` is empty. It creates both
+schemas (`source_system`, `analytics`) and the `pipeline_metadata` table.
+
+---
+
+## Running the Pipeline
+
+### Full pipeline (recommended first run)
+
+```bash
+python main.py --full-refresh
+# Equivalent: make full-refresh
+```
+
+### Incremental (Bronze already current)
+
+```bash
+python main.py --incremental
+# Equivalent: make incremental
+```
+
+### Single stage
+
+```bash
+python main.py --stage extract     # Stage 1 only
+python main.py --stage silver      # Stage 3 only
+python main.py --stage warehouse   # Stage 5 only
+python main.py --stage quality     # Stage 7 only
+```
+
+### All CLI options
+
+```
+python main.py [--full-refresh | --incremental | --stage STAGE] [--no-fail-fast]
+
+  --full-refresh     Re-extract all data from APIs/DB, then transform and load.
+  --incremental      Skip extraction; re-run Silver → Gold → Warehouse → Quality only.
+  --stage STAGE      Run exactly one stage. Choices:
+                       init, setup, extract, load, silver, gold, warehouse, quality
+  --no-fail-fast     Continue on failure rather than stopping at the first error.
+```
+
+---
+
+## Project Structure
+
+```
+Multi-Source ETL/
+├── main.py                          # Pipeline orchestrator (argparse CLI)
+├── Makefile                         # Helper commands for all pipeline operations
+├── pyproject.toml                   # Tool config: black, ruff, mypy, pytest
+├── requirements.txt                 # Runtime Python dependencies
+├── requirements-dev.txt             # Dev tools: pytest, black, ruff, mypy, jupyter
+├── Dockerfile                        # Multi-stage image: deps layer + slim runtime
+├── .dockerignore                    # Excludes .env, data/, logs/, tests/ from build context
+├── docker-compose.yml               # PostgreSQL 16 + etl-pipeline app service (profiles)
+├── docker-compose.override.yml      # Dev: pgAdmin on :5050 (auto-merged locally)
+├── .env.example                     # Credentials template — copy to .env, never commit
+├── .gitignore                       # Excludes .env, /data/, *.pbix, __pycache__
+│
+├── scripts/
+│   └── test_db_connection.py        # Stage 0 smoke test — 6 connectivity checks
+│
+├── sql/
+│   ├── ddl/
+│   │   ├── 00_init.sql              # Docker entrypoint: schemas + pipeline_metadata
+│   │   ├── 01_schemas.sql           # Schema stubs (idempotent)
+│   │   ├── 02_pipeline_metadata.sql # Metadata table DDL (idempotent)
+│   │   ├── 03_source_system.sql     # source_system schema: 9 Olist tables
+│   │   ├── 04_gold_schema.sql       # analytics schema: 5 dims + 3 facts + indexes
+│   │   ├── 05_data_quality.sql      # data_quality_log table DDL
+│   │   └── 06_powerbi_readiness.sql # powerbi_reader role, extra indexes, v_sales_enriched view
+│   └── queries/
+│       ├── check_connection.sql     # One-shot connectivity verification
+│       └── row_counts.sql           # Row counts across all ETL tables
+│
+├── src/
+│   ├── setup/
+│   │   └── load_source_db.py        # Stage 0b: Kaggle download + schema + CSV load
+│   ├── extract/
+│   │   ├── extract_db.py            # Stage 1a: source_system → Bronze Parquet snapshot
+│   │   ├── extract_api.py           # Stage 1b: API orchestrator (weather + FX)
+│   │   ├── extract_file.py          # Stage 1c: flat-file ingestion + validation
+│   │   ├── extract_weather.py       # Open-Meteo API: ERA5 historical, retry + cache
+│   │   ├── extract_fx.py            # Frankfurter API: daily FX rates, gap-fill
+│   │   └── extract_flat_files.py    # Municipalities CSV download
+│   ├── transform/
+│   │   ├── transform_sales.py       # Stage 3a: orders + order_items → Silver Parquet
+│   │   ├── transform_weather.py     # Stage 3b: weather → Silver Parquet
+│   │   ├── transform_fx.py          # Stage 3c: FX rates → Silver Parquet (ffill gaps)
+│   │   ├── build_dimensions.py      # Stage 4a: 5 Gold dimension tables
+│   │   ├── build_facts.py           # Stage 4b: 3 Gold fact tables
+│   │   ├── schemas.py               # Pandera schema contracts (Silver boundary)
+│   │   ├── gold_utils.py            # Shared helpers: read_latest_silver, write_gold
+│   │   └── utils.py                 # Transform utilities
+│   ├── load/
+│   │   └── load_to_warehouse.py     # Stage 5: Gold Parquet → PostgreSQL analytics schema
+│   ├── orchestration/
+│   │   └── pipeline.py              # PipelineConfig, PipelineMode, run_pipeline()
+│   ├── quality/
+│   │   ├── checks.py                # 6 reusable check primitives + table-specific suites
+│   │   └── runner.py                # Stage 7 orchestrator: run → persist → halt
+│   └── utils/
+│       ├── db.py                    # get_engine(), get_connection(), init_schemas()
+│       ├── logger.py                # loguru: stdout INFO + rotating file DEBUG
+│       └── validators.py            # normalize_city_name(), validate_dataframe()
+│
+├── data/                            # Excluded from git (tracked via .gitkeep)
+│   ├── bronze/                      # Raw snapshots (olist/, weather/, fx/, manual/)
+│   ├── silver/                      # Cleaned Parquet (sales/, weather/, fx/, quarantine/)
+│   └── gold/                        # Star schema Parquet (dimensions/, facts/)
+│
+├── docs/
+│   ├── source_schema.md             # source_system ER diagram + 8 data quality gotchas
+│   ├── stage8_powerbi.md            # Power BI connection plan + semantic model design
+│   ├── stage9_dax_measures.md       # 27 DAX measures with format strings + rationale
+│   ├── stage10_dashboard_pages.md   # 4-page dashboard design spec + accessibility guide
+│   ├── stage14_interview_prep.md    # Resume bullet, project summary, 6 interview Q&A
+│   └── POWER_BI_SEMANTIC_MODEL_DESIGN.md
+│
+├── pbix/                            # Power BI Desktop files (excluded from git)
+├── notebooks/                       # Jupyter exploration notebooks
+├── logs/                            # Rotating etl.log (excluded from git)
+└── tests/
+    ├── test_validators.py           # Unit tests for normalize_city_name, validate_dataframe
+    ├── test_transforms.py           # Transform logic unit tests
+    └── test_db_connection.py        # Connectivity checks (skipped if no DB)
+```
+
+---
+
+## Skills Demonstrated
+
+| Skill | Where | What It Demonstrates |
+|-------|-------|----------------------|
+| Multi-source ingestion | `src/extract/extract_db.py`, `extract_api.py`, `extract_file.py` | Pulls from Kaggle CSV, Open-Meteo REST API, Frankfurter REST API, and GitHub flat file with independent retry logic and caching per source |
+| Medallion architecture | `src/orchestration/pipeline.py`, `data/bronze → silver → gold` | Three-layer progression: raw → cleaned → modeled; each layer has explicit quality gates and schema contracts |
+| Dimensional modelling | `src/transform/build_dimensions.py`, `build_facts.py` | Five dimension tables + three fact tables with surrogate keys, grain documentation, and referential integrity checks |
+| API resilience / retry | `src/extract/extract_api.py` | Exponential backoff with tenacity on transient HTTP errors (429, 5xx); configurable max retries and jitter |
+| SQL injection prevention | `src/quality/checks.py` lines 29–63 | Allowlist (`_ANALYTICS_TABLES` frozenset) validates every dynamic table name; parameterized queries for all values |
+| Data quality automation | `src/quality/checks.py`, `src/quality/runner.py` | Six reusable check primitives (row_count, null, uniqueness, range, referential integrity, column comparison); results persisted to `analytics.data_quality_log` |
+| Incremental load design | `src/orchestration/pipeline.py` (`INCREMENTAL_STAGES`) | Bronze layer skipped; pipeline re-runs Silver → Gold → Warehouse; guarded by `_loaded_at` timestamps to prevent duplicate rows |
+| Pipeline orchestration | `src/orchestration/pipeline.py` | Three modes (FULL_REFRESH, INCREMENTAL, SINGLE); fail_fast flag; callable stage registry; Prefect upgrade path documented in module docstring |
+| City name normalisation | `src/utils/validators.py::normalize_city_name()` | NFD decomposition strips accents, lowercases, trims whitespace; feeds into rapidfuzz fuzzy join on weather data |
+| FX cross-rate derivation | `src/transform/transform_fx.py` | Computes BRL/USD as (EUR/BRL) ÷ (EUR/USD) because Frankfurter publishes only EUR-base pairs; joins by date to every order-item |
+| Structured logging | `src/utils/logger.py` | loguru with dual sinks: INFO+ to stdout (colored), DEBUG+ to rotating file (10 MB, 7-day retention); lazy string interpolation |
+| Power BI model + DAX | `docs/stage9_dax_measures.md`, `docs/stage10_dashboard_pages.md` | 27 DAX measures across 6 display folders, Import-mode star schema with role-playing currency dimension, 4-page dashboard with accessibility spec |
+
+---
+
+## Stage Reference
+
+| Stage | Command | Description |
+|-------|---------|-------------|
+| 0a — init | `--stage init` | Create PostgreSQL schemas and `pipeline_metadata` table |
+| 0b — setup | `--stage setup` | Download Olist CSVs from Kaggle, create `source_system` schema, load all 9 tables |
+| 1 — extract | `--stage extract` | Pull Open-Meteo weather (20 cities), Frankfurter FX rates, and municipalities CSV; snapshot `source_system` to Bronze Parquet |
+| 3 — silver | `--stage silver` | Transform Bronze → Silver: type-cast, deduplicate, validate with pandera, quarantine invalid rows |
+| 4 — gold | `--stage gold` | Build 5 Gold dimension tables and 3 Gold fact tables from Silver Parquet |
+| 5 — warehouse | `--stage warehouse` | Load Gold Parquet into PostgreSQL `analytics` schema (dims: truncate+reload; facts: upsert) |
+| 7 — quality | `--stage quality` | Run automated quality checks against `analytics.*` tables; persist results to `data_quality_log` |
+
+---
+
+## Testing & CI
+
+![CI](https://github.com/richardzyh2017/multi-source-etl/actions/workflows/ci.yml/badge.svg)
+
+### Running tests locally
+
+```bash
+# Install dev dependencies (includes pytest, pytest-cov, pytest-mock)
+make install-dev
+
+# Run the full test suite with coverage
+make test
+# Equivalent: pytest tests/ -v --cov=src/transform --cov-report=term-missing
+
+# Run without coverage (faster during development)
+pytest tests/ -v --no-cov
+
+# Run a single test file
+pytest tests/test_transform_functions.py -v
+
+# Run a single test
+pytest tests/test_transforms.py::TestTransformFx::test_forward_fill_missing_dates -v
+```
+
+### Test suite structure
+
+| File | Scope | Tests |
+|------|-------|-------|
+| `tests/test_transforms.py` | Inline transform logic (sales, weather, FX) | 13 |
+| `tests/test_validators.py` | `normalize_city_name`, `validate_dataframe`, DQ report | 13 |
+| `tests/test_gold_utils.py` | `assign_surrogate_keys`, `check_referential_integrity` | 12 |
+| `tests/test_silver_utils.py` | `write_silver`, `quarantine_rows`, `read_latest_bronze_parquet`, `log_transform_summary` | 14 |
+| `tests/test_schemas.py` | Pandera schema validation via `validate_silver` | 21 |
+| `tests/test_transform_functions.py` | Full transform functions with mocked I/O | 12 |
+
+**Total: ~85 tests.** All tests are pure unit tests — no database, no network, no Parquet files on disk required.
+
+### Coverage target
+
+Coverage is measured on `src/transform/` only. The `--cov-fail-under=60` flag causes `pytest` to exit with code 1 if coverage drops below 60%, enforcing the gate in CI. Branch coverage is enabled (`branch = true`) to test both sides of quarantine guards.
+
+### CI/CD
+
+`.github/workflows/ci.yml` runs on every push and pull request to `main`.
+
+| Step | Tool | Fails build? |
+|------|------|-------------|
+| Lint | ruff | Yes |
+| Format check | black | Yes |
+| Type check | mypy | No (continue-on-error) |
+| Unit tests + coverage | pytest-cov | Yes (below 60%) |
+| Coverage upload | Codecov | No (optional) |
+
+Matrix: Python 3.10, 3.11, 3.12 on `ubuntu-latest`.
+
+---
+
+## Data Quality Framework
+
+Quality checks run after warehouse load (Stage 7) and log results to
+`analytics.data_quality_log`. Checks cover all three fact tables.
+
+**Check types:**
+
+| Check | What It Tests |
+|-------|--------------|
+| Row count threshold | Minimum expected rows in each fact/dim table |
+| Null rate | Columns that must not exceed a null fraction |
+| Uniqueness | Primary key columns must contain no duplicates |
+| Value range | Numeric columns must fall within expected bounds |
+| Referential integrity | Fact FK columns must resolve to valid dimension PKs |
+| Column comparison | e.g., `delivery_days_actual >= 0` |
+
+**Severity levels:** `INFO` (informational) → `WARNING` (investigate) → `CRITICAL` (halt).
+
+**Configurable halt threshold:**
+```bash
+python main.py --stage quality           # halts on CRITICAL (default)
+python -m src.quality.runner --halt-on WARNING   # halts on WARNING or above
+```
+
+**SQL injection protection:** All check functions validate table names against
+`_ANALYTICS_TABLES` (a `frozenset`) before interpolating into SQL. Any name not in
+the allowlist raises `ValueError` immediately.
+
+---
+
+## Power BI Integration
+
+See [`docs/stage8_powerbi.md`](docs/stage8_powerbi.md) for the full connection guide and semantic model design.
+
+**Quick reference:**
+
+| Item | Value |
+|------|-------|
+| Connection mode | Import (not DirectQuery) |
+| Driver | Npgsql 6.0.x |
+| Schema | `analytics` (set via `options=-csearch_path=analytics` in Advanced Options) |
+| Role | `powerbi_reader` (SELECT-only, created by `06_powerbi_readiness.sql`) |
+| date_key conversion | `#date(Number.IntegerDivide([date_key],10000), ...)` in Power Query |
+| Role-playing currency | Duplicate Currencies query as "Currencies (Quote)" for FX base/quote FKs |
+| DAX measures | 27 measures documented in [`docs/stage9_dax_measures.md`](docs/stage9_dax_measures.md) |
+| Dashboard | 4 pages documented in [`docs/stage10_dashboard_pages.md`](docs/stage10_dashboard_pages.md) |
+
+**Screenshots and `.pbix` files** are stored in `pbix/` (git-ignored; share separately).
+
+---
+
+## Known Limitations
+
+- **2016 data sparsity**: Orders begin in Q4 2016; the first three months contain only ~3% of annual volume. Year-over-year comparisons are misleading without explicit filtering to 2017–2018.
+- **Weather join coverage (~5–8% gap)**: Rural and remote zip codes fail the fuzzy city-name join, leaving those order-items without weather context. This reflects Olist source data, not a pipeline bug. Unmatched rows are retained in fact_sales with null weather keys.
+- **FX cross-rate derivation**: Frankfurter API publishes only EUR-base pairs. BRL/USD is computed as (EUR/BRL) ÷ (EUR/USD), introducing two sources of rate risk. Mid-market rates only — not suitable for financial reporting.
+- **Item-grain delivery metrics**: Multi-item orders appear once per line-item in fact_sales. A five-item order shipped one week late counts as five late items. Order-level SLA analysis requires aggregation back to `order_id` grain.
+- **Review scores quarantined in Silver**: Customer review data exists in Olist but is excluded from Gold fact_sales due to data quality issues (missing reviews, inconsistent timestamps). Raw data is preserved in Silver for ad-hoc analysis.
+- **Brasília time in source timestamps**: All Olist timestamps are in Brasília time (UTC-3) without explicit timezone metadata. Power BI and SQL queries assume UTC-3; explicit offset application is required for other time zones.
+- **Import mode Power BI**: The dashboard refreshes by re-importing from PostgreSQL, not via DirectQuery. Refresh requires re-running the pipeline on the source machine.
+- **Fuzzy city-name join ambiguity**: The rapidfuzz threshold is conservative (80%) to minimize false positives; this increases unmatched records but preserves join integrity.
+
+---
+
+## Future Improvements
+
+- **Prefect or Airflow orchestration**: `pipeline.py` is structured for easy migration — its module docstring maps `PipelineConfig → @flow parameters`, `run_pipeline() → @flow`, and `_execute_stage() → @task`. Converting requires only decorator additions.
+- **Incremental weather and FX extraction**: Both APIs currently re-pull the full date range on every extract run. Date-range partitioning with check-if-exists guards would reduce API load and runtime significantly.
+- **dbt for Silver/Gold transforms**: Current pandas transforms are functional but lack SQL-based lineage and test visibility. Migrating to dbt would enable automated doc generation and tighter integration with a modern data warehouse.
+- **Geolocation enrichment**: The Olist geolocation CSV (zip_code_prefix → latitude/longitude) is currently underused. Enriching dimension tables with coordinates enables geographic clustering, heatmap visualizations, and distance-based delivery cost analysis.
+- **Review score Gold layer**: Review data is quarantined in Silver due to quality concerns. A validated `fact_reviews` table would unlock customer satisfaction analytics linked to seller and product dimensions.
+- **Automated CI pipeline**: GitHub Actions running `pytest`, pandera schema checks, and data quality validation on every commit would catch regressions before they reach production. Add pre-commit hooks for ruff + black + mypy.
+- **DirectQuery mode for Power BI**: Provisioning a production PostgreSQL instance with read replicas would allow Power BI DirectQuery, enabling real-time dashboards without a re-import refresh cycle.
+
+---
+
+## Development
+
+```bash
+# Install dev dependencies
+make install-dev
+
+# Format code (black)
+make format
+
+# Lint (ruff)
+make lint
+
+# Type check (mypy)
+make typecheck
+
+# Run tests
+make test
+
+# Remove bytecode and cache files
+make clean
+```
+
+Code style: Black (100-char line length), ruff, mypy strict. Configuration in `pyproject.toml`.
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| `EnvironmentError: Missing DB_HOST` | `.env` not configured | `cp .env.example .env` and fill in values |
+| `psycopg2.OperationalError: connection refused` | PostgreSQL not running | `make db-up && make db-status` |
+| `No Parquet files found in Bronze` | Extract not run yet | `make extract` first |
+| Silver quarantine has unexpected rows | Data quality issue in source | Check `data/silver/quarantine/` for rejection reasons |
+| `analytics.data_quality_log` has CRITICAL rows | Quality gate triggered | Inspect log, then re-run `make full-refresh` |
+| Power BI "Column not found" error | Stale semantic model | Refresh all queries in Power Query Editor |
+| `schemas are missing` error at startup | `00_init.sql` not run | `make init` |
+
+---
+
+## Attribution
+
+- **Olist Brazilian E-Commerce Public Dataset** — Kaggle (CC BY 4.0)
+- **Open-Meteo Historical Weather API** — free, no key required, ERA5 data
+- **Frankfurter Exchange Rate API** — free, no key required, ECB data
+
+---
+
+*A new contributor can get the project running end-to-end by following the [Quick Start](#quick-start) section above.*

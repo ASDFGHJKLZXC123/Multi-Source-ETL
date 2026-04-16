@@ -1,0 +1,48 @@
+[project]
+name = "multi-source-etl"
+version = "0.1.0"
+description = "Multi-source ETL pipeline: Olist e-commerce + Open-Meteo weather + Frankfurter FX"
+requires-python = ">=3.10"
+readme = "README.md"
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short --cov=src/transform --cov-report=term-missing --cov-report=xml --cov-fail-under=60"
+markers = [
+    "unit: Pure unit tests — no I/O, no database, no network",
+    "integration: Tests that require a live database or filesystem state (skip with -m 'not integration')",
+]
+
+[tool.coverage.run]
+source = ["src/transform"]
+branch = true
+omit = [
+    "src/transform/__init__.py",
+    "src/**/__init__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 60
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "sys\\.exit\\(",
+]
