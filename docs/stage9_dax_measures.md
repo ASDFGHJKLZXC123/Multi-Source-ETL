@@ -1,5 +1,14 @@
 # Stage 9 — DAX Measures
 
+> **⚠ FX measures are partially stale.** Sections referencing
+> `Latest EUR/BRL Rate`, `Latest EUR/USD Rate`, and BRL/USD cross-rate
+> derivation reflect an older pipeline that fetched EUR-base pairs from
+> Frankfurter. The current pipeline fetches the direct USD/BRL pair (see
+> `src/extract/extract_fx.py`) and exposes a pre-joined view
+> `analytics.v_sales_usd` with `unit_price_usd = unit_price_brl / rate`.
+> A revenue-USD DAX measure can be computed as
+> `SUMX(v_sales_usd, [unit_price_usd])` directly without cross-rate math.
+
 > **Power BI model target:** `_Measures` disconnected table  
 > **Currency:** All monetary measures are BRL unless explicitly labelled USD  
 > **Calendar table:** `Calendar` (marked as date table on the `date` DATE column)  

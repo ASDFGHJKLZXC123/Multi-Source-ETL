@@ -221,7 +221,10 @@ COMMENT ON VIEW analytics.v_sales_enriched IS
 --     cities without weather coverage (see Known Limitations).
 -- =============================================================
 
-CREATE OR REPLACE VIEW analytics.v_sales_with_weather AS
+-- DROP first so we can change column ordering / add interior columns;
+-- CREATE OR REPLACE VIEW only allows append-only column changes in PostgreSQL.
+DROP VIEW IF EXISTS analytics.v_sales_with_weather;
+CREATE VIEW analytics.v_sales_with_weather AS
 SELECT
     fs.order_item_id,
     fs.order_code,
@@ -230,6 +233,15 @@ SELECT
     fs.unit_price,
     fs.freight_value,
     fs.delivery_days_actual,
+    fs.delivery_days_estimated,
+    -- on-time = delivered no later than the carrier-promised date.
+    -- NULL until the order is delivered (delivery_days_actual IS NULL).
+    CASE
+        WHEN fs.delivery_days_actual IS NULL THEN NULL
+        WHEN fs.delivery_days_estimated IS NULL THEN NULL
+        ELSE fs.delivery_days_actual <= fs.delivery_days_estimated
+    END                 AS is_on_time,
+    fs.order_status,
     dc.city             AS customer_city,
     dc.normalized_city  AS customer_city_normalized,
     dc.state            AS customer_state,

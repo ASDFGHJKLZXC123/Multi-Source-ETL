@@ -1,6 +1,12 @@
 # Stage 10 — Power BI Dashboard Pages
 ## Brazilian E-Commerce Analytics: Olist 2016–2018
 
+> **⚠ FX/installments narrative is partially stale.** Where this document
+> describes EUR-base FX cross-rate derivation, the pipeline now fetches
+> the direct USD/BRL pair (`src/extract/extract_fx.py`) and exposes
+> `analytics.v_sales_usd` for USD-normalised reporting. Build USD measures
+> against that view, not via `EUR/BRL ÷ EUR/USD`.
+
 **Prerequisites:** Stage 8 (semantic model), Stage 9 (DAX measures)
 **Canvas:** 1280 × 720 px, 16:9 widescreen, Import mode (~60 MB)
 

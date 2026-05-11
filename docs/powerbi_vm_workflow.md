@@ -39,9 +39,17 @@ macOS, then use that IP in Power BI).
 | Advanced Options → SQL statement | leave blank (use Navigator) |
 | Include relationship columns | unchecked |
 
-Authentication: **Database** → user `powerbi_reader`, password from `.env`
-(`POSTGRES_PBI_READER_PASSWORD`, defined in `06_powerbi_readiness.sql`). The
-role is `SELECT`-only on the `analytics` schema.
+Authentication: **Database** → user `powerbi_reader`. The role is created in
+`sql/ddl/06_powerbi_readiness.sql` with a literal placeholder password
+(`'<strong_password>'`). Before connecting from Power BI you must replace it
+with a real value via `psql`:
+
+```sql
+ALTER ROLE powerbi_reader WITH PASSWORD '<your-strong-password>';
+```
+
+Use that same password in the Power BI database-auth dialog. The role is
+`SELECT`-only on the `analytics` schema.
 
 In the Navigator, tick:
 

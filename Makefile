@@ -71,7 +71,7 @@ init: ## Stage 0a — Create PostgreSQL schemas and pipeline_metadata table
 setup: ## Stage 0b — Download Olist dataset, create source_system schema, load CSVs
 	python main.py --stage setup
 
-extract: ## Stage 1  — Pull weather (Open-Meteo) + FX (Frankfurter) + flat files
+extract: ## Stage 1  — DB snapshot + APIs (Open-Meteo + Frankfurter) + raw Olist Bronze snapshots
 	python main.py --stage extract
 
 silver: ## Stage 3  — Transform Bronze → Silver (clean, validate, quarantine)

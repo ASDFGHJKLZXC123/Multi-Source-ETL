@@ -94,8 +94,8 @@ This is a portfolio project, not production software. I optimised for demonstrat
 
 | Limitation | Honest explanation |
 |------------|-------------------|
-| Weather join ~5–8% coverage gap | Fuzzy city match on rural zip codes fails; documented in Silver |
-| FX is a cross-rate, not direct pair | Frankfurter has no direct USD/BRL; EUR base used, cross-rate computed |
+| Weather coverage limited to top 20 cities (~61% miss) | Open-Meteo extractor pulls only the top 20 cities by order volume; broaden via `WEATHER_CITY_COUNT` env var |
+| FX is mid-market USD/BRL only | Frankfurter direct USD→BRL pair, weekend/holiday-gap forward-filled; not transaction-grade |
 | Olist is a full reload, not incremental | Kaggle has no delta API; `--incremental` skips only the extract stage |
 | Power BI is Import mode, not real-time | ~60 MB model, daily refresh sufficient for this dataset |
 | review_score not in Gold schema | review_id has duplicates; decision was to quarantine rather than deduplicate ambiguously |

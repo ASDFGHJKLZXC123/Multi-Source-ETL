@@ -1,5 +1,15 @@
 # Stage 8 — Power BI Connection & Data Model
 
+> **⚠ FX section is partially stale.** This document was written when
+> Frankfurter only published EUR-base pairs and BRL/USD had to be derived
+> as a cross-rate. The pipeline now extracts the **direct USD/BRL pair**
+> via `src/extract/extract_fx.py` and stores one row per calendar day in
+> `analytics.fact_fx_rates` (`base_currency='USD'`, `quote_currency='BRL'`).
+> Use the pre-joined view `analytics.v_sales_usd` (defined in
+> `sql/ddl/06_powerbi_readiness.sql`) instead of computing
+> `EUR/BRL ÷ EUR/USD` cross-rates in DAX. Sections 6.x below that reference
+> EUR-base measures should be treated as design history.
+
 > **Pipeline stage:** 8 of 8  
 > **Schema target:** `analytics` (PostgreSQL Gold layer)  
 > **Companion SQL:** `sql/ddl/06_powerbi_readiness.sql`
@@ -243,7 +253,12 @@ Latest EUR/USD Rate =
         'Exchange Rates'[quote_currency] = "USD"
     )
 
--- BRL/USD cross-rate (Frankfurter uses EUR base; no direct BRL/USD pair)
+-- DEPRECATED: cross-rate derivation kept here as design history.
+-- The current pipeline fetches USD/BRL directly via src/extract/extract_fx.py.
+-- Use analytics.v_sales_usd or:
+--   USD per BRL = LASTNONBLANK('Exchange Rates'[rate], 1)
+--                 with base_currency='USD' AND quote_currency='BRL'
+-- BRL/USD cross-rate (legacy when only EUR-base was available):
 BRL per USD =
     DIVIDE([Latest EUR/BRL Rate], [Latest EUR/USD Rate])
 

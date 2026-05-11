@@ -5,7 +5,7 @@ sources — Kaggle's Olist Brazilian e-commerce dataset (99,441 orders / 112,650
 line items), Open-Meteo historical weather (20 cities, ERA5), and Frankfurter FX rates
 (daily USD/BRL) — into a unified PostgreSQL analytics warehouse via the medallion
 architecture. Bronze preserves raw snapshots (Parquet for source-DB tables, JSON for
-API responses, CSV for manual reference files); Silver enforces pandera schema
+API responses); Silver enforces pandera schema
 contracts with quarantine routing for invalid rows; Gold materialises a star schema
 (3 facts, 5 dims) in both Parquet and PostgreSQL. The pipeline ships with Docker
 Compose for one-command deployment and a pytest suite of 98 test functions (95 pure unit + 3 DB-integration skipped without a live DB) across a Python 3.10–3.12 CI matrix on GitHub Actions. A 4-page Power BI dashboard with 27 DAX measures is
@@ -184,8 +184,7 @@ halting immediately.
 |--------|--------|--------|------|
 | Olist Brazilian E-Commerce (Kaggle) | 9 CSV files | ~99,441 orders / 112,650 items | Kaggle login (free) |
 | Open-Meteo Archive API | JSON (REST) | ~730 days × 20 cities | None |
-| Frankfurter FX API | JSON (REST) | ~550 trading days, EUR base | None |
-| Municipios Brasileiros (GitHub) | CSV | 5,570 Brazilian municipalities | None |
+| Frankfurter FX API | JSON (REST) | ~550 trading days, direct USD/BRL | None |
 
 ---
 
@@ -446,16 +445,16 @@ Multi-Source ETL/
 
 | Skill | Where | What It Demonstrates |
 |-------|-------|----------------------|
-| Multi-source ingestion | `src/extract/extract_db.py`, `extract_api.py`, `extract_olist_csvs.py` | Pulls from Kaggle CSV (via `setup`) into the `source_system` schema, snapshots both modelled and unmodelled Olist CSVs to Bronze Parquet, and fetches Open-Meteo + Frankfurter REST APIs with independent retry logic per source |
+| Multi-source ingestion | `src/extract/extract_db.py`, `extract_api.py`, `extract_olist_csvs.py`, `extract_weather.py`, `extract_fx.py` | Pulls from Kaggle CSV (via `setup`) into the `source_system` schema, snapshots both modelled and unmodelled Olist CSVs to Bronze Parquet, and fetches Open-Meteo + Frankfurter REST APIs |
 | Medallion architecture | `src/orchestration/pipeline.py`, `data/bronze → silver → gold` | Three-layer progression: raw → cleaned → modeled; each layer has explicit quality gates and schema contracts |
 | Dimensional modelling | `src/transform/build_dimensions.py`, `build_facts.py` | Five dimension tables + three fact tables with surrogate keys, grain documentation, and referential integrity checks |
-| API resilience / retry | `src/extract/extract_api.py` | Exponential backoff with tenacity on transient HTTP errors (429, 5xx); configurable max retries and jitter |
+| API resilience / retry | `src/extract/extract_weather.py` | Hand-rolled bounded-retry loop with exponential backoff for transient HTTP failures on the Open-Meteo extractor; the FX extractor relies on Frankfurter's stable public endpoint and does not retry. |
 | SQL injection prevention | `src/quality/checks.py` lines 29–63 | Allowlist (`_ANALYTICS_TABLES` frozenset) validates every dynamic table name; parameterized queries for all values |
 | Data quality automation | `src/quality/checks.py`, `src/quality/runner.py` | Six reusable check primitives (row_count, null, uniqueness, range, referential integrity, column comparison); results persisted to `analytics.data_quality_log` |
-| Incremental load design | `src/orchestration/pipeline.py` (`INCREMENTAL_STAGES`) | Bronze layer skipped; pipeline re-runs Silver → Gold → Warehouse; guarded by `_loaded_at` timestamps to prevent duplicate rows |
+| Incremental load design | `src/orchestration/pipeline.py` (`INCREMENTAL_STAGES`), `src/load/load_to_warehouse.py` | Bronze layer skipped; pipeline re-runs Silver → Gold → Warehouse → Quality. Idempotency: dimensions reload via TRUNCATE+INSERT; facts upsert via `INSERT … ON CONFLICT (pk_cols) DO UPDATE` so re-runs never produce duplicate rows. `_loaded_at` is a batch-stamp audit column, not the dedup mechanism. |
 | Pipeline orchestration | `src/orchestration/pipeline.py` | Three modes (FULL_REFRESH, INCREMENTAL, SINGLE); fail_fast flag; callable stage registry; Prefect upgrade path documented in module docstring |
-| City name normalisation | `src/utils/validators.py::normalize_city_name()` | NFD decomposition strips accents, lowercases, trims whitespace; feeds into rapidfuzz fuzzy join on weather data |
-| FX cross-rate derivation | `src/transform/transform_fx.py` | Computes BRL/USD as (EUR/BRL) ÷ (EUR/USD) because Frankfurter publishes only EUR-base pairs; joins by date to every order-item |
+| City name normalisation | `src/utils/validators.py::normalize_city_name()` | NFD decomposition strips accents (stdlib `unicodedata`), lowercases, trims whitespace. Used by `src/transform/transform_weather.py` on weather observation cities and by `src/transform/build_dimensions.py::build_dim_customer` to populate `dim_customer.normalized_city`, so `analytics.v_sales_with_weather` joins exactly without a Postgres `unaccent()` extension. |
+| FX rate ingestion | `src/extract/extract_fx.py`, `src/transform/transform_fx.py` | Fetches the direct USD→BRL daily series from Frankfurter, forward-fills weekend/holiday gaps so every calendar day has a rate, and persists to `analytics.fact_fx_rates`. Pre-joined to sales as `analytics.v_sales_usd` (`unit_price_usd = unit_price_brl / rate`). |
 | Structured logging | `src/utils/logger.py` | loguru with dual sinks: INFO+ to stdout (colored), DEBUG+ to rotating file (10 MB, 7-day retention); lazy string interpolation |
 | Power BI model + DAX (designed) | `docs/stage9_dax_measures.md`, `docs/stage10_dashboard_pages.md` | 27 DAX measures specified across 6 display folders; Import-mode star-schema design with role-playing currency dimension; 4-page dashboard layout with accessibility spec. The `.pbix` is authored separately on a Windows VM (see `docs/powerbi_vm_workflow.md`); screenshots in `docs/screenshots/` when exported. |
 | Containerisation | `Dockerfile`, `docker-compose.yml` | Multi-stage Docker build (deps layer + slim runtime, non-root user); Compose profiles so `db-up` starts only Postgres and `docker compose run` opts in the pipeline; DB_HOST override pattern eliminates `.env` edits between modes |
@@ -469,7 +468,7 @@ Multi-Source ETL/
 |-----------------|-------------|
 | `init` | Create PostgreSQL schemas and `pipeline_metadata` table |
 | `setup` | Download Olist CSVs from Kaggle, create `source_system` schema, load the 5 modelled source tables (`customers`, `stores`, `products`, `orders`, `order_items`). The other 4 raw CSVs are snapshotted to Bronze in stage `extract` (1d). |
-| `extract` | Pull Open-Meteo weather (20 cities) and Frankfurter FX rates; snapshot `source_system` to Bronze Parquet (5 tables); snapshot the 4 unmodelled raw Olist CSVs (payments / reviews / geolocation / category translation) to Bronze Parquet |
+| `extract` | Stage 1a: snapshot `source_system` to Bronze Parquet (5 tables). Stage 1b: pull Open-Meteo weather (20 cities) and Frankfurter FX rates. Stage 1c: snapshot the 4 unmodelled raw Olist CSVs (payments / reviews / geolocation / category translation) to Bronze Parquet. |
 | `silver` | Transform Bronze → Silver: type-cast, deduplicate, validate with pandera, quarantine invalid rows |
 | `gold` | Build 5 Gold dimension tables and 3 Gold fact tables from Silver Parquet |
 | `warehouse` | Load Gold Parquet into PostgreSQL `analytics` schema (dims: truncate+reload; facts: upsert) |
@@ -583,8 +582,9 @@ See [`docs/stage8_powerbi.md`](docs/stage8_powerbi.md) for the full connection g
 | Dashboard | 4 pages documented in [`docs/stage10_dashboard_pages.md`](docs/stage10_dashboard_pages.md) |
 
 **`.pbix` files** are stored in `pbix/` (git-ignored). **Exported PNG screenshots**
-of each dashboard page live under `docs/screenshots/` (committed). For the macOS
-authoring workflow (Power BI Desktop is Windows-only), see
+of each dashboard page should be placed under `docs/screenshots/` once the `.pbix`
+is built and exported (the directory currently holds only its README). For the
+macOS authoring workflow (Power BI Desktop is Windows-only), see
 [`docs/powerbi_vm_workflow.md`](docs/powerbi_vm_workflow.md).
 
 ---
@@ -592,13 +592,12 @@ authoring workflow (Power BI Desktop is Windows-only), see
 ## Known Limitations
 
 - **2016 data sparsity**: Orders begin in Q4 2016; the first three months contain only ~3% of annual volume. Year-over-year comparisons are misleading without explicit filtering to 2017–2018.
-- **Weather join coverage (~5–8% gap)**: Rural and remote zip codes fail the fuzzy city-name join, leaving those order-items without weather context. This reflects Olist source data, not a pipeline bug. Unmatched rows are retained in fact_sales with null weather keys.
-- **FX cross-rate derivation**: Frankfurter API publishes only EUR-base pairs. BRL/USD is computed as (EUR/BRL) ÷ (EUR/USD), introducing two sources of rate risk. Mid-market rates only — not suitable for financial reporting.
-- **Item-grain delivery metrics**: Multi-item orders appear once per line-item in fact_sales. A five-item order shipped one week late counts as five late items. Order-level SLA analysis requires aggregation back to `order_id` grain.
-- **Review data is Bronze-only, no Silver/Gold layer**: Customer review data is snapshotted to `data/bronze/db/reviews/snapshot.parquet` (Stage 1d) but no Silver transform or Gold fact table exists yet. Source data has duplicate `review_id` values and inconsistent timestamps; promoting it to a `fact_reviews` table is on the roadmap (see Future Improvements).
+- **Weather coverage limited to 20 cities (~61% miss)**: The Open-Meteo extractor pulls daily observations for the top 20 cities by order volume only; sales from any other city land in `fact_sales` with no matching `fact_weather_daily` row (`v_sales_with_weather` shows ~38.7% match rate). Increasing coverage means raising `WEATHER_CITY_COUNT` in `.env` and re-running extract.
+- **FX is mid-market USD/BRL only**: `fact_fx_rates` carries one row per calendar day for the direct USD→BRL pair from Frankfurter, weekend/holiday-gap forward-filled. Rates are mid-market and not suitable for transaction-grade financial reporting.
+- **Item-grain delivery metrics**: Multi-item orders appear once per line-item in `fact_sales`. A five-item order shipped one week late counts as five late items. Order-level SLA analysis requires aggregation back to `order_id` grain.
+- **Review data is Bronze-only, no Silver/Gold layer**: Customer review data is snapshotted to `data/bronze/db/reviews/snapshot.parquet` (Stage 1c) but no Silver transform or Gold fact table exists yet. Source data has duplicate `review_id` values and inconsistent timestamps; promoting it to a `fact_reviews` table is on the roadmap (see Future Improvements).
 - **Brasília time in source timestamps**: All Olist timestamps are in Brasília time (UTC-3) without explicit timezone metadata. Power BI and SQL queries assume UTC-3; explicit offset application is required for other time zones.
 - **Import mode Power BI**: The dashboard refreshes by re-importing from PostgreSQL, not via DirectQuery. Refresh requires re-running the pipeline on the source machine.
-- **Fuzzy city-name join ambiguity**: The rapidfuzz threshold is conservative (80%) to minimize false positives; this increases unmatched records but preserves join integrity.
 
 ---
 

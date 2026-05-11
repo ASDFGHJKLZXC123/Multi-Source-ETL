@@ -38,7 +38,9 @@ BRONZE_DB: Final[Path] = _PROJECT_ROOT / "data" / "bronze" / "db"
 #: Root directory for API extracts (sub-directories: weather/, fx/).
 BRONZE_API: Final[Path] = _PROJECT_ROOT / "data" / "bronze" / "api"
 
-#: Root directory for manually sourced flat files (CSV / Parquet).
+#: Reserved landing zone for any future manually-sourced reference files.
+#: No active code path writes or reads this directory today; kept so the
+#: directory layout stays present for future hand-curated CSVs.
 BRONZE_MANUAL: Final[Path] = _PROJECT_ROOT / "data" / "bronze" / "manual"
 
 

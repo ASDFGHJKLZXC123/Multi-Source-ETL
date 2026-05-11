@@ -13,7 +13,7 @@ Individual stages
 -----------------
   init       Stage 0a — Create PostgreSQL schemas + pipeline_metadata table
   setup      Stage 0b — Download Olist, create source_system schema, load CSVs
-  extract    Stage 1  — Pull weather (Open-Meteo) + FX (Frankfurter) + flat files
+  extract    Stage 1  — DB snapshot (5 modelled tables) + APIs (Open-Meteo + Frankfurter) + raw Olist Bronze snapshots (4 unmodelled CSVs)
   load       Stage 2  — Load source DB (alias for setup, kept for clarity)
   silver     Stage 3  — Transform Bronze → Silver (clean, validate, quarantine)
   gold       Stage 4  — Build Gold star schema (Parquet files)

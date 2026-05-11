@@ -1,5 +1,5 @@
 """
-Stage 1d — snapshot the 4 raw Olist CSVs that are NOT modelled in source_system
+Stage 1c — snapshot the 4 raw Olist CSVs that are NOT modelled in source_system
 (payments, reviews, geolocation, category translation) into Bronze as Parquet.
 
 Why this exists
