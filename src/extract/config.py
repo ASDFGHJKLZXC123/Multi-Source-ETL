@@ -108,9 +108,9 @@ BRONZE_DB_TABLES: Final[list[str]] = [
 
 # ---------------------------------------------------------------------------
 # Flat-file schema specifications
-# Maps each file's stem (filename without extension) to the minimum set of
-# columns that must be present for the file to be considered valid.
-# extract_file.py uses this dict to gate downstream processing.
+# Only files actually validated against data/bronze/manual/ live here.
+# Olist CSVs are downloaded from Kaggle into data/bronze/olist/ by
+# src.setup.load_source_db; their column contracts live in that loader.
 # ---------------------------------------------------------------------------
 
 FLAT_FILE_SCHEMAS: Final[dict[str, list[str]]] = {
@@ -121,42 +121,6 @@ FLAT_FILE_SCHEMAS: Final[dict[str, list[str]]] = {
         "longitude",
         "capital",
         "codigo_uf",
-    ],
-    "olist_customers_dataset": [
-        "customer_id",
-        "customer_unique_id",
-        "customer_zip_code_prefix",
-        "customer_city",
-        "customer_state",
-    ],
-    "olist_sellers_dataset": [
-        "seller_id",
-        "seller_zip_code_prefix",
-        "seller_city",
-        "seller_state",
-    ],
-    "olist_products_dataset": [
-        "product_id",
-        "product_category_name",
-        "product_weight_g",
-    ],
-    "olist_orders_dataset": [
-        "order_id",
-        "customer_id",
-        "order_status",
-        "order_purchase_timestamp",
-    ],
-    "olist_order_items_dataset": [
-        "order_id",
-        "order_item_id",
-        "product_id",
-        "seller_id",
-        "price",
-        "freight_value",
-    ],
-    "product_category_name_translation": [
-        "product_category_name",
-        "product_category_name_english",
     ],
 }
 

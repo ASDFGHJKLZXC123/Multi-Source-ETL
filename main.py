@@ -66,6 +66,7 @@ def stage_extract() -> None:
     from src.extract.extract_db import extract_all_tables
     from src.extract.extract_api import extract_all_apis
     from src.extract.extract_file import ingest_municipios, validate_all_manual_files
+    from src.extract.extract_olist_csvs import snapshot_all as snapshot_raw_olist
     from src.utils.db import get_pipeline_config
 
     cfg = get_pipeline_config()
@@ -92,6 +93,9 @@ def stage_extract() -> None:
     file_results = validate_all_manual_files()
     passed = sum(file_results.values())
     logger.info("Flat-file validation: {}/{} files passed", passed, len(file_results))
+
+    logger.info("--- Stage 1d: Raw Olist Bronze snapshots (payments/reviews/geo/translation) ---")
+    snapshot_raw_olist()
 
 
 def stage_load() -> None:

@@ -96,6 +96,9 @@ full-refresh: ## Full run: extract → silver → gold → warehouse → quality
 incremental: ## Re-transform + re-load only (Bronze already fresh): silver → gold → warehouse → quality
 	python main.py --incremental
 
+bootstrap: ## First-time end-to-end: init schemas → load source DB → full refresh (idempotent)
+	$(MAKE) init && $(MAKE) setup && $(MAKE) full-refresh
+
 # ---------------------------------------------------------------------------
 # Docker — containerised pipeline
 # ---------------------------------------------------------------------------
