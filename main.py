@@ -146,8 +146,11 @@ def stage_gold() -> None:
 def stage_warehouse() -> None:
     """Stage 5: Load Gold Parquet files into the PostgreSQL analytics schema.
 
-    Dimensions: truncate-and-reload.
+    Dimensions: truncate-and-reload (all 5).
     Facts: INSERT … ON CONFLICT DO UPDATE (idempotent upsert).
+    Loader registry currently covers 3 facts (fact_sales, fact_weather_daily,
+    fact_fx_rates); fact_payments Parquet is produced by Stage 4 but is not
+    yet registered in src/load/load_to_warehouse.py::_FACT_TABLES.
     """
     from src.load.load_to_warehouse import run as run_load
 

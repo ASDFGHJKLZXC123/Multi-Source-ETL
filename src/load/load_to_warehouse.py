@@ -264,7 +264,11 @@ def load_all(
     dims_dir: Path | None = None,
     facts_dir: Path | None = None,
 ) -> dict[str, int]:
-    """Load all dimension and fact tables from Gold Parquet into PostgreSQL.
+    """Load all registered dimension and fact tables from Gold Parquet into PostgreSQL.
+
+    Registry coverage: 5 dimensions + 3 facts (fact_sales, fact_weather_daily,
+    fact_fx_rates). ``fact_payments`` Parquet is built by Stage 4 but is not
+    yet listed in ``_FACT_TABLES``; add the registry entry to load it.
 
     Dimensions are truncated-and-reloaded in registry order; facts are
     upserted.  A missing Parquet file is logged as a WARNING and that table
@@ -388,7 +392,10 @@ def main(argv: list[str] | None = None) -> int:
         Exit code — ``0`` on success, ``1`` on failure.
     """
     parser = argparse.ArgumentParser(
-        description="Stage 5: Load Gold Parquet files into PostgreSQL analytics schema.",
+        description=(
+            "Stage 5: Load Gold Parquet files into PostgreSQL analytics schema "
+            "(loads 5 dims + 3 facts today; fact_payments not yet registered)."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(

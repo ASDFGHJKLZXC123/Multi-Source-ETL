@@ -151,8 +151,11 @@ CREATE INDEX IF NOT EXISTS idx_fact_fx_loaded_at
 
 -- =============================================================
 -- 4. Enriched sales view
---    Pre-joins fact_sales to its four dimensions so Power BI can
---    import a single denormalised table for sales analysis.
+--    Pre-joins fact_sales to four of its five FK dimensions
+--    (dim_date, dim_customer, dim_product, dim_store).
+--    dim_currency is omitted because current source data is BRL-only;
+--    use analytics.v_sales_usd for USD-normalised reporting.
+--    Designed so Power BI can import a single denormalised table.
 --    All filters applied in Power BI fold to PostgreSQL SQL.
 --
 --    NOTE: This view does NOT include weather data.

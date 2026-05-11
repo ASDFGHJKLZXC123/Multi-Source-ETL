@@ -468,14 +468,14 @@ Badge spec: 72 px × 28 px, corner-radius 4 px, 9 pt Bold white text.
 | Olist CSV | "PASS/WARN/FAIL" badge + row count loaded | Same logic |
 | Open-Meteo API | "PASS/WARN/FAIL" badge + weather records loaded | Same logic |
 | Frankfurter API | "PASS/WARN/FAIL" badge + FX records loaded | Same logic |
-| Rows Loaded | Numeric count of total Gold-layer rows across all 3 fact tables | `#2E86C1` accent |
+| Rows Loaded | Numeric count of total Gold-layer rows across the 3 warehouse-loaded fact tables (`fact_sales`, `fact_weather_daily`, `fact_fx_rates`) | `#2E86C1` accent |
 | Quality Score | `Data Quality Pass Rate` measure formatted as `0.0%` | Green ≥ 95%; Amber 90–94.9%; Red < 90% |
 
 **Three-state criteria:**
 
 | State | Condition |
 |---|---|
-| NOMINAL | All row counts within 0.5% of baseline; all 3 sources loaded; null rates on join keys < 2%; no transformation errors logged |
+| NOMINAL | All row counts within 0.5% of baseline; all 3 external sources loaded; null rates on join keys < 2%; no transformation errors logged |
 | REVIEW NEEDED | Row count deviates 0.5–5% from baseline; OR null rate on join key > 2%; OR API returned partial data (date range differs > 3 days from expected) |
 | PIPELINE FAULT | Source failed to load entirely; OR Gold table is empty; OR order_id null rate > 5%; OR Bronze→Silver row count drops > 10% without documented dedup reason |
 

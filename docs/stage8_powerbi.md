@@ -317,7 +317,7 @@ Use the `BRL per USD` measure stub in Section 4.1. For a permanent fix, request 
 
 Power BI does not support composite relationship keys. Options (in order of preference):
 
-1. **PostgreSQL view** — `analytics.v_sales_enriched` (created by `06_powerbi_readiness.sql`) pre-joins `fact_sales` to its four dimensions, returning `customer_city`, `customer_state` alongside the fact measures. Import this view alongside `Daily Weather Conditions` and join on a composite WeatherBridgeKey (see option 2).
+1. **PostgreSQL view** — `analytics.v_sales_enriched` (created by `06_powerbi_readiness.sql`) pre-joins `fact_sales` to four of its five FK dimensions (dim_date, dim_customer, dim_product, dim_store — dim_currency omitted, since current data is BRL-only), returning `customer_city`, `customer_state` alongside the fact measures. Import this view alongside `Daily Weather Conditions` and join on a composite WeatherBridgeKey (see option 2).
 2. **Power Query composite key** — add a calculated column `WeatherBridgeKey = [Customer City] & "|" & [Customer State] & "|" & Text.From([date_key])` in both `Customers` and `Daily Weather Conditions`, then relate on that key.
 3. **DAX TREATAS** — advanced; use only if option 1 and 2 are not viable.
 

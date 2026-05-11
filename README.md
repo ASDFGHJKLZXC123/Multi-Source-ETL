@@ -457,7 +457,7 @@ Multi-Source ETL/
 |-------|-------|----------------------|
 | Multi-source ingestion | `src/extract/extract_db.py`, `extract_api.py`, `extract_olist_csvs.py`, `extract_weather.py`, `extract_fx.py` | Pulls from Kaggle CSV (via `setup`) into the `source_system` schema, snapshots both modelled and unmodelled Olist CSVs to Bronze Parquet, and fetches Open-Meteo + Frankfurter REST APIs |
 | Medallion architecture | `src/orchestration/pipeline.py`, `data/bronze → silver → gold` | Three-layer progression: raw → cleaned → modeled; each layer has explicit quality gates and schema contracts |
-| Dimensional modelling | `src/transform/build_dimensions.py`, `build_facts.py` | Five dimension tables + three fact tables with surrogate keys, grain documentation, and referential integrity checks |
+| Dimensional modelling | `src/transform/build_dimensions.py`, `build_facts.py` | Five dimension tables + four fact tables (sales, weather, fx, payments) with surrogate keys, grain documentation, and referential integrity checks. Three facts are warehouse-loaded today; `fact_payments` is Gold-Parquet-only until its loader lands. |
 | API resilience / retry | `src/extract/extract_weather.py` | Hand-rolled bounded-retry loop with exponential backoff for transient HTTP failures on the Open-Meteo extractor; the FX extractor relies on Frankfurter's stable public endpoint and does not retry. |
 | SQL injection prevention | `src/quality/checks.py` lines 29–63 | Allowlist (`_ANALYTICS_TABLES` frozenset) validates every dynamic table name; parameterized queries for all values |
 | Data quality automation | `src/quality/checks.py`, `src/quality/runner.py` | Six reusable check primitives (row_count, null, uniqueness, range, referential integrity, column comparison); results persisted to `analytics.data_quality_log` |
@@ -481,7 +481,7 @@ Multi-Source ETL/
 | `extract` | Stage 1a: snapshot `source_system` to Bronze Parquet (6 tables). Stage 1b: pull Open-Meteo weather (20 cities) and Frankfurter FX rates. Stage 1c: snapshot the 3 unmodelled raw Olist CSVs (reviews / geolocation / category translation) to Bronze Parquet. |
 | `silver` | Transform Bronze → Silver: type-cast, deduplicate, validate with pandera, quarantine invalid rows |
 | `gold` | Build 5 Gold dimension tables and 4 Gold fact tables (sales, weather, fx, payments) from Silver Parquet |
-| `warehouse` | Load Gold Parquet into PostgreSQL `analytics` schema (dims: truncate+reload; facts: upsert) |
+| `warehouse` | Load Gold Parquet into PostgreSQL `analytics` schema (dims: truncate+reload; facts: upsert via `INSERT … ON CONFLICT`). Loader registry currently covers 5 dims + 3 facts (sales, weather, fx); `fact_payments` Parquet is built by Stage 4 but not yet registered for warehouse load. |
 | `quality` | Run automated quality checks against `analytics.*` tables; persist results to `data_quality_log` |
 
 ---
