@@ -73,7 +73,7 @@ def snapshot_one(csv_stem: str, bronze_subdir: str) -> int:
 
 
 def snapshot_all() -> dict[str, int]:
-    """Snapshot all four raw Olist CSVs to Bronze. Returns ``{subdir: row_count}``."""
+    """Snapshot the three unmodelled raw Olist CSVs to Bronze. Returns ``{subdir: row_count}``."""
     results: dict[str, int] = {}
     for csv_stem, bronze_subdir in _RAW_OLIST_SNAPSHOTS:
         results[bronze_subdir] = snapshot_one(csv_stem, bronze_subdir)

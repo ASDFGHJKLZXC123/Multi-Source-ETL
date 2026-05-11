@@ -7,7 +7,9 @@ line items), Open-Meteo historical weather (20 cities, ERA5), and Frankfurter FX
 architecture. Bronze preserves raw snapshots (Parquet for source-DB tables, JSON for
 API responses); Silver enforces pandera schema
 contracts with quarantine routing for invalid rows; Gold materialises a star schema
-(3 facts, 5 dims) in both Parquet and PostgreSQL. The pipeline ships with Docker
+(4 facts in Gold Parquet — fact_sales, fact_weather_daily, fact_fx_rates,
+fact_payments — and 5 dims; 3 facts are loaded into PostgreSQL today, fact_payments
+is Parquet-only until its warehouse loader lands). The pipeline ships with Docker
 Compose for one-command deployment and a pytest suite of 98 test functions (95 pure unit + 3 DB-integration skipped without a live DB) across a Python 3.10–3.12 CI matrix on GitHub Actions. A 4-page Power BI dashboard with 27 DAX measures is
 specified in `docs/stage8–10*` against the `analytics` schema; the `.pbix` file is
 authored separately (Power BI Desktop is Windows-only) and kept under `pbix/`.
@@ -45,10 +47,10 @@ authored separately (Power BI Desktop is Windows-only) and kept under `pbix/`.
                               │  data/bronze/                            │
                               │  PostgreSQL: source_system schema        │
                               │                                          │
-                              │  • DB snapshot, 5 modelled tables        │
+                              │  • DB snapshot, 6 modelled tables        │
                               │      (Parquet under bronze/db/)          │
-                              │  • Raw Olist snapshots, 4 unmodelled     │
-                              │      (payments, reviews, geolocation,    │
+                              │  • Raw Olist snapshots, 3 unmodelled     │
+                              │      (reviews, geolocation,              │
                               │       category_translation — Parquet)    │
                               │  • Weather records, JSON via Open-Meteo  │
                               │  • FX rates, JSON via Frankfurter        │
@@ -78,10 +80,13 @@ authored separately (Power BI Desktop is Windows-only) and kept under `pbix/`.
                               │    dim_product · dim_store               │
                               │    dim_currency                          │
                               │                                          │
-                              │  Facts (3)                               │
+                              │  Facts (4 in Gold Parquet)               │
                               │    fact_sales (grain: order line item)   │
                               │    fact_weather_daily (grain: city+date) │
                               │    fact_fx_rates (grain: date+ccy pair)  │
+                              │    fact_payments (grain: order+pmt_seq)  │
+                              │      Parquet-only today; warehouse       │
+                              │      loader entry pending                │
                               └─────────────────┬───────────────────────┘
                                                 │
                                                 ▼
@@ -99,8 +104,12 @@ authored separately (Power BI Desktop is Windows-only) and kept under `pbix/`.
 
 ### Gold Layer — Star Schema
 
-`fact_sales` is the primary fact table. `fact_weather_daily` and `fact_fx_rates` are
-independent conformed facts that share `dim_date` and `dim_currency`.
+`fact_sales` is the primary fact table. `fact_weather_daily`, `fact_fx_rates`, and
+`fact_payments` are independent conformed facts that share `dim_date` (and
+`dim_currency` for fx and payments). `fact_payments` is omitted from the ASCII
+diagram below for layout reasons — its FKs are `(date_key, customer_key,
+currency_key)` plus the degenerate `order_code` dimension; see
+`sql/ddl/04_gold_schema.sql` and `src/transform/build_facts.py::build_fact_payments`.
 
 ```
                          ┌──────────────────┐
@@ -137,7 +146,7 @@ independent conformed facts that share `dim_date` and `dim_currency`.
 ```
 
 > **`dim_date` key:** `date_key` is an `INT` in `YYYYMMDD` format (e.g. `20171125`),
-> not a native `DATE` type. All three fact tables join to `dim_date` on this integer key.
+> not a native `DATE` type. All four fact tables join to `dim_date` on this integer key.
 
 ### Orchestration Modes
 
@@ -372,8 +381,8 @@ Multi-Source ETL/
 │   │   ├── 00_init.sql              # Docker entrypoint: schemas + pipeline_metadata
 │   │   ├── 01_schemas.sql           # Schema stubs (idempotent)
 │   │   ├── 02_pipeline_metadata.sql # Metadata table DDL (idempotent)
-│   │   ├── 03_source_system.sql     # source_system schema: 5 modelled source tables (other 4 Olist CSVs are Bronze-only)
-│   │   ├── 04_gold_schema.sql       # analytics schema: 5 dims + 3 facts + indexes
+│   │   ├── 03_source_system.sql     # source_system schema: 6 modelled source tables (other 3 Olist CSVs are Bronze-only)
+│   │   ├── 04_gold_schema.sql       # analytics schema: 5 dims + 4 facts + indexes (fact_payments not yet warehouse-loaded)
 │   │   ├── 05_data_quality.sql      # data_quality_log table DDL
 │   │   └── 06_powerbi_readiness.sql # powerbi_reader role, extra indexes, v_sales_enriched view
 │   └── queries/
@@ -386,15 +395,16 @@ Multi-Source ETL/
 │   ├── extract/
 │   │   ├── extract_db.py            # Stage 1a: source_system → Bronze Parquet snapshot
 │   │   ├── extract_api.py           # Stage 1b: API orchestrator (weather + FX)
-│   │   ├── extract_olist_csvs.py    # Stage 1c: snapshot the 4 unmodelled raw Olist CSVs to Bronze
+│   │   ├── extract_olist_csvs.py    # Stage 1c: snapshot the 3 unmodelled raw Olist CSVs (reviews, geolocation, category_translation) to Bronze
 │   │   ├── extract_weather.py       # Open-Meteo API: ERA5 historical, retry + cache
 │   │   └── extract_fx.py            # Frankfurter API: daily FX rates, gap-fill
 │   ├── transform/
 │   │   ├── transform_sales.py       # Stage 3a: orders + order_items → Silver Parquet
 │   │   ├── transform_weather.py     # Stage 3b: weather → Silver Parquet
 │   │   ├── transform_fx.py          # Stage 3c: FX rates → Silver Parquet (ffill gaps)
+│   │   ├── transform_payments.py    # Stage 3d: payments → Silver Parquet (not_defined quarantined)
 │   │   ├── build_dimensions.py      # Stage 4a: 5 Gold dimension tables
-│   │   ├── build_facts.py           # Stage 4b: 3 Gold fact tables
+│   │   ├── build_facts.py           # Stage 4b: 4 Gold fact tables (sales, weather, fx, payments)
 │   │   ├── schemas.py               # Pandera schema contracts (Silver boundary)
 │   │   ├── gold_utils.py            # Shared helpers: read_latest_silver, write_gold
 │   │   └── utils.py                 # Transform utilities
@@ -467,10 +477,10 @@ Multi-Source ETL/
 | `--stage` value | Description |
 |-----------------|-------------|
 | `init` | Create PostgreSQL schemas and `pipeline_metadata` table |
-| `setup` | Download Olist CSVs from Kaggle, create `source_system` schema, load the 5 modelled source tables (`customers`, `stores`, `products`, `orders`, `order_items`). The other 4 raw CSVs are snapshotted to Bronze in stage `extract` (1d). |
-| `extract` | Stage 1a: snapshot `source_system` to Bronze Parquet (5 tables). Stage 1b: pull Open-Meteo weather (20 cities) and Frankfurter FX rates. Stage 1c: snapshot the 4 unmodelled raw Olist CSVs (payments / reviews / geolocation / category translation) to Bronze Parquet. |
+| `setup` | Download Olist CSVs from Kaggle, create `source_system` schema, load the 6 modelled source tables (`customers`, `stores`, `products`, `orders`, `order_items`, `payments`). The other 3 raw CSVs are snapshotted to Bronze in stage `extract` (1c). |
+| `extract` | Stage 1a: snapshot `source_system` to Bronze Parquet (6 tables). Stage 1b: pull Open-Meteo weather (20 cities) and Frankfurter FX rates. Stage 1c: snapshot the 3 unmodelled raw Olist CSVs (reviews / geolocation / category translation) to Bronze Parquet. |
 | `silver` | Transform Bronze → Silver: type-cast, deduplicate, validate with pandera, quarantine invalid rows |
-| `gold` | Build 5 Gold dimension tables and 3 Gold fact tables from Silver Parquet |
+| `gold` | Build 5 Gold dimension tables and 4 Gold fact tables (sales, weather, fx, payments) from Silver Parquet |
 | `warehouse` | Load Gold Parquet into PostgreSQL `analytics` schema (dims: truncate+reload; facts: upsert) |
 | `quality` | Run automated quality checks against `analytics.*` tables; persist results to `data_quality_log` |
 
@@ -537,7 +547,9 @@ Matrix: Python 3.10, 3.11, 3.12 on `ubuntu-latest`.
 ## Data Quality Framework
 
 Quality checks run after warehouse load (Stage 7) and log results to
-`analytics.data_quality_log`. Checks cover all three fact tables.
+`analytics.data_quality_log`. Checks cover the three warehouse-loaded fact tables
+(`fact_sales`, `fact_weather_daily`, `fact_fx_rates`); `fact_payments` is on the
+follow-up list once its warehouse loader lands.
 
 **Check types:**
 
@@ -603,17 +615,20 @@ macOS authoring workflow (Power BI Desktop is Windows-only), see
 
 ## Future Improvements / Explicit Roadmap
 
-The four raw Olist CSVs not modelled today (payments, reviews, geolocation,
-category_translation) are now snapshotted to Bronze Parquet on every extract
-run, but no Silver or Gold layer is built from them. Promoting them is the
-next planned increment:
+Three raw Olist CSVs not modelled today (reviews, geolocation,
+category_translation) are snapshotted to Bronze Parquet on every extract run,
+but no Silver or Gold layer is built from them. Promoting them is the next
+planned increment. `fact_payments` is partially shipped — its remaining work
+is also tracked here:
 
-- **`fact_payments`**: grain = one row per payment record (~100k rows). FKs
-  to `dim_date` (via `order_id` join) and a degenerate `order_code`. Measures:
-  `payment_value`, `payment_installments`, `payment_sequential`. Attribute:
-  `payment_type` (credit_card / boleto / voucher / debit_card). Implementation
-  scope: source_system DDL + load function + pandera schema + Silver transform
-  + Gold builder + warehouse loader + quality checks (~1 day).
+- **`fact_payments` (Phase 4 follow-up)**: source_system table, Silver
+  transform (`transform_payments.py`), pandera schema, Gold builder, Gold
+  Parquet output, and `analytics.fact_payments` DDL are **all in place** at
+  `b72742c`. Pending: warehouse-loader entry in `src/load/load_to_warehouse.py`
+  `_FACT_TABLES`, ~5 quality checks (row_count, no-null PK, uniqueness on
+  `(order_id, payment_sequential)`, `payment_value > 0`, RI on `date_key`),
+  unit tests for `transform_payments` + `SilverPaymentsSchema`, and a Skills
+  Demonstrated row update. ~30 min of work.
 - **`fact_reviews`**: grain = one row per review (~100k rows). FKs to
   `dim_date` (review creation) and `order_code`. Measures: `review_score`,
   comment length. Currently flagged in Known Limitations because of source

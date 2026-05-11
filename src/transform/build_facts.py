@@ -1,7 +1,7 @@
 """
 Stage 4 — Gold layer: fact table builders.
 
-This module builds the three Gold fact tables from Silver sources and the
+This module builds the four Gold fact tables from Silver sources and the
 Gold dimension tables produced by ``build_dimensions.py``.  All outputs are
 written as date-suffix-free Parquet files to ``data/gold/facts/``.
 
@@ -32,6 +32,20 @@ fact_fx_rates
       - date_key           — computed from ``date`` column as YYYYMMDD int.
       - base_currency_key  — left-join on ``base_currency``  → dim_currency.
       - quote_currency_key — left-join on ``quote_currency`` → dim_currency.
+
+fact_payments
+    Grain: one row per (order_id, payment_sequential). Split payments produce
+    multiple rows per order.
+    Sources: Silver ``payments/payments`` joined to Silver ``sales/orders``
+    for date + customer FK resolution.
+    FK resolution:
+      - date_key       — computed from order ``order_date`` as YYYYMMDD int.
+      - customer_key   — left-join via the joined order's ``customer_id``.
+      - currency_key   — left-join on ``currency_code`` → dim_currency
+                         (always BRL in current source data).
+    Degenerate dimension: ``order_code`` (preserved on the fact).
+    Note: this builder writes Gold Parquet today; the warehouse loader
+    entry for ``analytics.fact_payments`` is pending.
 
 Design decisions
 ----------------

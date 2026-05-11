@@ -23,6 +23,9 @@
 --   6. analytics.fact_sales        (FK -> all five dimensions)
 --   7. analytics.fact_weather_daily (FK -> dim_date)
 --   8. analytics.fact_fx_rates     (FK -> dim_date, dim_currency x2)
+--   9. analytics.fact_payments     (FK -> dim_date, dim_customer, dim_currency)
+--                                   DDL is in place; warehouse loader entry
+--                                   in src/load/load_to_warehouse.py is pending.
 --
 -- Design principles:
 --   • dim_date uses YYYYMMDD integer keys — self-documenting and
@@ -552,6 +555,9 @@ CREATE INDEX IF NOT EXISTS idx_dim_store_state
 --   Step 7 — analytics.fact_weather_daily (depends on dim_date)
 --   Step 8 — analytics.fact_fx_rates     (depends on dim_date,
 --                                          dim_currency x2)
+--   Step 9 — analytics.fact_payments     (depends on dim_date,
+--                                          dim_customer, dim_currency)
+--                                         Loader entry pending.
 --
 -- All five dimensions must be fully loaded before any fact
 -- table is loaded.  Steps 2–5 are order-independent among

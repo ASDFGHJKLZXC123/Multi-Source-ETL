@@ -13,7 +13,7 @@ Individual stages
 -----------------
   init       Stage 0a — Create PostgreSQL schemas + pipeline_metadata table
   setup      Stage 0b — Download Olist, create source_system schema, load CSVs
-  extract    Stage 1  — DB snapshot (5 modelled tables) + APIs (Open-Meteo + Frankfurter) + raw Olist Bronze snapshots (4 unmodelled CSVs)
+  extract    Stage 1  — DB snapshot (6 modelled tables) + APIs (Open-Meteo + Frankfurter) + raw Olist Bronze snapshots (3 unmodelled CSVs)
   load       Stage 2  — Load source DB (alias for setup, kept for clarity)
   silver     Stage 3  — Transform Bronze → Silver (clean, validate, quarantine)
   gold       Stage 4  — Build Gold star schema (Parquet files)
@@ -121,7 +121,9 @@ def stage_gold() -> None:
 
     Outputs (data/gold/):
       dimensions/ — dim_date, dim_customer, dim_product, dim_store, dim_currency
-      facts/      — fact_sales, fact_weather_daily, fact_fx_rates
+      facts/      — fact_sales, fact_weather_daily, fact_fx_rates, fact_payments
+                    (fact_payments is Parquet-only today; its warehouse loader
+                    entry in src/load/load_to_warehouse.py is pending)
     """
     from src.transform.build_dimensions import run as run_dimensions
     from src.transform.build_facts import run as run_facts

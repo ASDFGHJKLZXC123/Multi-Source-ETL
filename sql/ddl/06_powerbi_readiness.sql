@@ -25,7 +25,9 @@
 --   • currency_key index on fact_sales
 --   • quote_currency_key index on fact_fx_rates
 --   • date_key index on fact_weather_daily
---   • _loaded_at indexes on all three fact tables
+--   • _loaded_at indexes on the three warehouse-loaded fact tables
+--     (fact_payments DDL exists but is not yet loaded; add its
+--      _loaded_at index when the warehouse loader entry lands)
 --
 -- Prerequisites
 -- -------------
@@ -130,9 +132,11 @@ CREATE INDEX IF NOT EXISTS idx_fact_fx_quote_currency
 
 
 -- =============================================================
--- 3. _loaded_at indexes on fact tables
+-- 3. _loaded_at indexes on warehouse-loaded fact tables
 --    Required for Power BI incremental refresh range scans.
 --    Not created by 04_gold_schema.sql.
+--    fact_payments is omitted until its warehouse loader entry
+--    in src/load/load_to_warehouse.py lands.
 -- =============================================================
 
 CREATE INDEX IF NOT EXISTS idx_fact_sales_loaded_at
