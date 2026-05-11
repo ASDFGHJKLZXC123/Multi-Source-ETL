@@ -7,9 +7,9 @@ All claims are grounded in the actual implementation — nothing here is aspirat
 
 ## Resume Bullet
 
-> Engineered a Python medallion ETL pipeline integrating 3 independent data sources (Olist e-commerce, Open-Meteo weather, Frankfurter FX) into a PostgreSQL analytics warehouse, processing 112,650 order line items through Bronze→Silver→Gold stages with pandera schema validation, automated data quality checks, and a 27-measure Power BI dashboard; tested with 85 unit tests across a Python 3.10–3.12 CI matrix on GitHub Actions.
+> Engineered a Python medallion ETL pipeline integrating 3 independent data sources (Olist e-commerce, Open-Meteo weather, Frankfurter FX) into a PostgreSQL analytics warehouse, processing 112,650 order line items through Bronze→Silver→Gold stages with pandera schema validation, automated data quality checks, and a 27-measure Power BI semantic-model design; tested with 95 unit tests across a Python 3.10–3.12 CI matrix on GitHub Actions.
 
-**Why it works:** Quantifies scope (3 sources, 112,650 rows, 27 measures, 85 tests), names specific technologies, and describes the outcome (analytics-ready warehouse + dashboard). Fits in two lines.
+**Why it works:** Quantifies scope (3 sources, 112,650 rows, 27 measures, 95 tests), names specific technologies, and describes the outcome (analytics-ready warehouse + dashboard design). Fits in two lines.
 
 ---
 

@@ -1,5 +1,14 @@
 # Power BI Semantic Model Design — Multi-Source ETL Analytics
 
+> **⚠ Partially aspirational.** Sections that reference `review_score`,
+> `Average Review Score`, `5-Star Review Rate`, or other review-derived
+> measures describe a target state — they are not deliverable today
+> because review data is Bronze-only (no Silver/Gold layer; see the
+> Roadmap in `README.md`). FX-rate sections that derive `BRL/USD` as
+> `EUR/BRL ÷ EUR/USD` cross-rates are also stale: the pipeline now
+> fetches the direct USD/BRL pair via `src/extract/extract_fx.py` and
+> exposes the pre-joined view `analytics.v_sales_usd`.
+
 **Project:** Multi-Source ETL Pipeline — Brazilian E-Commerce Analytics  
 **Data Source:** PostgreSQL `analytics` schema (Star schema)  
 **Target BI Tool:** Power BI Desktop + Service  

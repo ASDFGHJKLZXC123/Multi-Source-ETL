@@ -251,7 +251,7 @@ SELECT
     fw.windspeed,
     fw.weathercode
 FROM      analytics.fact_sales         fs
-JOIN      analytics.dim_customer       dc USING (customer_key)
+LEFT JOIN analytics.dim_customer       dc USING (customer_key)
 LEFT JOIN analytics.fact_weather_daily fw
        ON fw.date_key = fs.date_key
       AND fw.city     = dc.normalized_city
