@@ -57,6 +57,7 @@ from src.transform.utils import (
     read_latest_bronze_parquet,
 )
 from src.utils.logger import logger
+from src.utils.validators import normalize_city_name
 
 # ---------------------------------------------------------------------------
 # Hardcoded ISO 4217 currency name lookup
@@ -207,6 +208,11 @@ def build_dim_customer() -> pd.DataFrame:
             "dim_customer: deduplicated {:,} duplicate customer_code row(s)",
             dupes_dropped,
         )
+
+    # Pre-compute the normalized city used by Silver weather (NFD-stripped lowercase).
+    # Persisting it on dim_customer lets analytics.v_sales_with_weather join
+    # without depending on a Postgres `unaccent` extension at query time.
+    df["normalized_city"] = df["city"].fillna("").map(normalize_city_name)
 
     df = assign_surrogate_keys(df, "customer_key")
 

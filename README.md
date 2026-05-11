@@ -8,8 +8,7 @@ architecture. Bronze preserves raw snapshots (Parquet for source-DB tables, JSON
 API responses, CSV for manual reference files); Silver enforces pandera schema
 contracts with quarantine routing for invalid rows; Gold materialises a star schema
 (3 facts, 5 dims) in both Parquet and PostgreSQL. The pipeline ships with Docker
-Compose for one-command deployment and a 95-test pytest suite across a Python 3.10–3.12
-CI matrix on GitHub Actions. A 4-page Power BI dashboard with 27 DAX measures is
+Compose for one-command deployment and a pytest suite of 98 test functions (95 pure unit + 3 DB-integration skipped without a live DB) across a Python 3.10–3.12 CI matrix on GitHub Actions. A 4-page Power BI dashboard with 27 DAX measures is
 specified in `docs/stage8–10*` against the `analytics` schema; the `.pbix` file is
 authored separately (Power BI Desktop is Windows-only) and kept under `pbix/`.
 
@@ -22,7 +21,7 @@ authored separately (Power BI Desktop is Windows-only) and kept under `pbix/`.
 - **Does adverse weather correlate with order volume volatility or increased delivery failures?** Weather facts are joined daily to orders by city, enabling analysis of temperature, precipitation, and wind conditions against order placement and on-time delivery rates.
 - **How does USD/BRL exchange rate volatility impact reported revenue when normalized to a standard currency?** FX rates are joined by order date to every order-item, enabling native-BRL reporting alongside USD-normalized comparisons.
 - **Which product categories drive the highest freight costs relative to item value, and how does this vary by delivery region?** Line-item facts include unit price, freight cost, and product-to-geography foreign keys for margin and cost analysis.
-- **What is the relationship between actual delivery speed and customer satisfaction?** The pipeline calculates days-to-deliver and on-time delivery flags, available for correlation with product and seller metrics.
+- **How does delivery performance vary by seller, region, and product category?** `fact_sales` carries `delivery_days_actual` and `delivery_days_estimated` per line item, joinable to `dim_store` (seller geography) and `dim_product`. Customer-satisfaction analytics (review scores) are not yet supported — they land when `fact_reviews` ships (see Future Improvements).
 - **Which sellers have the highest on-time delivery rates by state, and how do their performance metrics compare to peers?** Order-item facts include seller geography and delivery performance flags, enabling seller scorecard analysis.
 
 ---
@@ -32,14 +31,14 @@ authored separately (Power BI Desktop is Windows-only) and kept under `pbix/`.
 ### Pipeline Data Flow
 
 ```
-┌──────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
-│  Olist CSVs      │  │  Open-Meteo API      │  │  Frankfurter API     │  │  Municipalities CSV  │
-│  (Kaggle)        │  │  (no key required)   │  │  (no key required)   │  │  (GitHub)            │
-└────────┬─────────┘  └──────────┬───────────┘  └──────────┬───────────┘  └──────────┬───────────┘
-         │                       │                          │                          │
-         └───────────────────────┴──────────────────────────┴──────────────────────────┘
-                                                    │
-                                                    ▼
+┌──────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
+│  Olist CSVs      │  │  Open-Meteo API      │  │  Frankfurter API     │
+│  (Kaggle)        │  │  (no key required)   │  │  (no key required)   │
+└────────┬─────────┘  └──────────┬───────────┘  └──────────┬───────────┘
+         │                       │                          │
+         └───────────────────────┴──────────────────────────┘
+                                            │
+                                            ▼
                               ┌─────────────────────────────────────────┐
                               │               BRONZE LAYER               │
                               │                                          │
@@ -53,7 +52,6 @@ authored separately (Power BI Desktop is Windows-only) and kept under `pbix/`.
                               │       category_translation — Parquet)    │
                               │  • Weather records, JSON via Open-Meteo  │
                               │  • FX rates, JSON via Frankfurter        │
-                              │  • Municipalities flat file (CSV)        │
                               └─────────────────┬───────────────────────┘
                                                 │
                                                 ▼
@@ -389,11 +387,9 @@ Multi-Source ETL/
 │   ├── extract/
 │   │   ├── extract_db.py            # Stage 1a: source_system → Bronze Parquet snapshot
 │   │   ├── extract_api.py           # Stage 1b: API orchestrator (weather + FX)
-│   │   ├── extract_file.py          # Stage 1c: flat-file ingestion + validation
-│   │   ├── extract_olist_csvs.py    # Stage 1d: snapshot the 4 unmodelled raw Olist CSVs to Bronze
+│   │   ├── extract_olist_csvs.py    # Stage 1c: snapshot the 4 unmodelled raw Olist CSVs to Bronze
 │   │   ├── extract_weather.py       # Open-Meteo API: ERA5 historical, retry + cache
-│   │   ├── extract_fx.py            # Frankfurter API: daily FX rates, gap-fill
-│   │   └── extract_flat_files.py    # Municipalities CSV download
+│   │   └── extract_fx.py            # Frankfurter API: daily FX rates, gap-fill
 │   ├── transform/
 │   │   ├── transform_sales.py       # Stage 3a: orders + order_items → Silver Parquet
 │   │   ├── transform_weather.py     # Stage 3b: weather → Silver Parquet
@@ -450,7 +446,7 @@ Multi-Source ETL/
 
 | Skill | Where | What It Demonstrates |
 |-------|-------|----------------------|
-| Multi-source ingestion | `src/extract/extract_db.py`, `extract_api.py`, `extract_file.py` | Pulls from Kaggle CSV, Open-Meteo REST API, Frankfurter REST API, and GitHub flat file with independent retry logic and caching per source |
+| Multi-source ingestion | `src/extract/extract_db.py`, `extract_api.py`, `extract_olist_csvs.py` | Pulls from Kaggle CSV (via `setup`) into the `source_system` schema, snapshots both modelled and unmodelled Olist CSVs to Bronze Parquet, and fetches Open-Meteo + Frankfurter REST APIs with independent retry logic per source |
 | Medallion architecture | `src/orchestration/pipeline.py`, `data/bronze → silver → gold` | Three-layer progression: raw → cleaned → modeled; each layer has explicit quality gates and schema contracts |
 | Dimensional modelling | `src/transform/build_dimensions.py`, `build_facts.py` | Five dimension tables + three fact tables with surrogate keys, grain documentation, and referential integrity checks |
 | API resilience / retry | `src/extract/extract_api.py` | Exponential backoff with tenacity on transient HTTP errors (429, 5xx); configurable max retries and jitter |
@@ -461,9 +457,9 @@ Multi-Source ETL/
 | City name normalisation | `src/utils/validators.py::normalize_city_name()` | NFD decomposition strips accents, lowercases, trims whitespace; feeds into rapidfuzz fuzzy join on weather data |
 | FX cross-rate derivation | `src/transform/transform_fx.py` | Computes BRL/USD as (EUR/BRL) ÷ (EUR/USD) because Frankfurter publishes only EUR-base pairs; joins by date to every order-item |
 | Structured logging | `src/utils/logger.py` | loguru with dual sinks: INFO+ to stdout (colored), DEBUG+ to rotating file (10 MB, 7-day retention); lazy string interpolation |
-| Power BI model + DAX | `docs/stage9_dax_measures.md`, `docs/stage10_dashboard_pages.md` | 27 DAX measures across 6 display folders, Import-mode star schema with role-playing currency dimension, 4-page dashboard with accessibility spec |
+| Power BI model + DAX (designed) | `docs/stage9_dax_measures.md`, `docs/stage10_dashboard_pages.md` | 27 DAX measures specified across 6 display folders; Import-mode star-schema design with role-playing currency dimension; 4-page dashboard layout with accessibility spec. The `.pbix` is authored separately on a Windows VM (see `docs/powerbi_vm_workflow.md`); screenshots in `docs/screenshots/` when exported. |
 | Containerisation | `Dockerfile`, `docker-compose.yml` | Multi-stage Docker build (deps layer + slim runtime, non-root user); Compose profiles so `db-up` starts only Postgres and `docker compose run` opts in the pipeline; DB_HOST override pattern eliminates `.env` edits between modes |
-| Testing & CI | `tests/`, `.github/workflows/ci.yml` | 98 tests (95 pure unit) covering transform logic, schema contracts, utility I/O, and Gold helpers; pandera and mocked I/O boundaries; pytest-cov with 60% branch-coverage gate; GitHub Actions matrix on Python 3.10–3.12 with ruff, black, mypy, and Codecov |
+| Testing & CI | `tests/`, `.github/workflows/ci.yml` | 98 test functions (95 pure unit + 3 DB-integration skipped without a live DB) covering transform logic, schema contracts, utility I/O, and Gold helpers; pandera and mocked I/O boundaries; pytest-cov with 60% branch-coverage gate; GitHub Actions matrix on Python 3.10–3.12 with ruff, black, mypy, and Codecov |
 
 ---
 
@@ -473,7 +469,7 @@ Multi-Source ETL/
 |-----------------|-------------|
 | `init` | Create PostgreSQL schemas and `pipeline_metadata` table |
 | `setup` | Download Olist CSVs from Kaggle, create `source_system` schema, load the 5 modelled source tables (`customers`, `stores`, `products`, `orders`, `order_items`). The other 4 raw CSVs are snapshotted to Bronze in stage `extract` (1d). |
-| `extract` | Pull Open-Meteo weather (20 cities), Frankfurter FX rates, municipalities CSV; snapshot `source_system` to Bronze Parquet (5 tables); snapshot the 4 unmodelled raw Olist CSVs (payments / reviews / geolocation / category translation) to Bronze Parquet |
+| `extract` | Pull Open-Meteo weather (20 cities) and Frankfurter FX rates; snapshot `source_system` to Bronze Parquet (5 tables); snapshot the 4 unmodelled raw Olist CSVs (payments / reviews / geolocation / category translation) to Bronze Parquet |
 | `silver` | Transform Bronze → Silver: type-cast, deduplicate, validate with pandera, quarantine invalid rows |
 | `gold` | Build 5 Gold dimension tables and 3 Gold fact tables from Silver Parquet |
 | `warehouse` | Load Gold Parquet into PostgreSQL `analytics` schema (dims: truncate+reload; facts: upsert) |
@@ -517,7 +513,7 @@ pytest tests/test_transforms.py::TestTransformFx::test_forward_fill_missing_date
 | `tests/test_transform_functions.py` | Full transform functions with mocked I/O | 12 |
 | `tests/test_db_connection.py` | PostgreSQL connectivity (skipped without a live DB) | 3 |
 
-**Total: 98 tests (95 pure unit + 3 DB integration).** Unit tests require no database, network, or Parquet files on disk.
+**Total: 98 test functions — 95 pure unit + 3 DB-integration skipped without a live DB.** Unit tests require no database, network, or Parquet files on disk.
 
 ### Coverage target
 

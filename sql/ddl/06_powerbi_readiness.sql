@@ -205,9 +205,89 @@ GRANT SELECT ON analytics.v_sales_enriched TO powerbi_reader;
 COMMENT ON VIEW analytics.v_sales_enriched IS
     'Pre-joined sales view: fact_sales + dim_date + dim_customer + dim_product + dim_store. '
     'Designed for Power BI Import — all column filters fold to PostgreSQL SQL. '
-    'Does not include weather data; weather correlation requires a separate join. '
-    'See docs/stage8_powerbi.md Section 6.2 for the WeatherBridgeKey pattern. '
-    'Created by 06_powerbi_readiness.sql.';
+    'For weather correlation see analytics.v_sales_with_weather; for USD reporting '
+    'see analytics.v_sales_usd. Created by 06_powerbi_readiness.sql.';
+
+
+-- =============================================================
+-- 4b. analytics.v_sales_with_weather
+--     Pre-joins fact_sales to dim_customer and fact_weather_daily so
+--     the README's "weather is joined daily to orders by city" claim
+--     is backed by a queryable artifact. Joins on (date_key,
+--     normalized_city, state) because fact_weather_daily.city is
+--     NFD-stripped lowercase per src.transform.transform_weather;
+--     dim_customer.normalized_city is populated to match.
+--     LEFT JOIN on weather preserves the ~5–8% of order-items in
+--     cities without weather coverage (see Known Limitations).
+-- =============================================================
+
+CREATE OR REPLACE VIEW analytics.v_sales_with_weather AS
+SELECT
+    fs.order_item_id,
+    fs.order_code,
+    fs.date_key,
+    fs.customer_key,
+    fs.unit_price,
+    fs.freight_value,
+    fs.delivery_days_actual,
+    dc.city             AS customer_city,
+    dc.normalized_city  AS customer_city_normalized,
+    dc.state            AS customer_state,
+    fw.temp_max,
+    fw.temp_min,
+    fw.precipitation,
+    fw.windspeed,
+    fw.weathercode
+FROM      analytics.fact_sales         fs
+JOIN      analytics.dim_customer       dc USING (customer_key)
+LEFT JOIN analytics.fact_weather_daily fw
+       ON fw.date_key = fs.date_key
+      AND fw.city     = dc.normalized_city
+      AND fw.state    = dc.state;
+
+GRANT SELECT ON analytics.v_sales_with_weather TO powerbi_reader;
+
+COMMENT ON VIEW analytics.v_sales_with_weather IS
+    'Pre-joined sales + customer + daily weather. LEFT JOIN on weather preserves '
+    'sales rows where the customer city has no Open-Meteo coverage. Created by '
+    '06_powerbi_readiness.sql; backs the "weather × sales" business question.';
+
+
+-- =============================================================
+-- 4c. analytics.v_sales_usd
+--     Pre-joins fact_sales to fact_fx_rates for the USD/BRL pair so
+--     the README's "FX rates are joined by order date to every
+--     order-item" claim is backed by a queryable artifact.
+--     Rate semantics: fact_fx_rates.rate where base_currency='USD'
+--     and quote_currency='BRL' is "1 USD = rate BRL", so USD value
+--     = BRL value / rate. LEFT JOIN with FX predicates in ON (not
+--     WHERE) preserves sales rows on dates without FX (weekends/
+--     holidays); usd_* columns are NULL for those rows.
+-- =============================================================
+
+CREATE OR REPLACE VIEW analytics.v_sales_usd AS
+SELECT
+    fs.order_item_id,
+    fs.order_code,
+    fs.date_key,
+    fs.unit_price                                   AS unit_price_brl,
+    fs.freight_value                                AS freight_value_brl,
+    fx.rate                                         AS usd_to_brl_rate,
+    ROUND((fs.unit_price    / fx.rate)::numeric, 4) AS unit_price_usd,
+    ROUND((fs.freight_value / fx.rate)::numeric, 4) AS freight_value_usd
+FROM      analytics.fact_sales    fs
+LEFT JOIN analytics.fact_fx_rates fx
+       ON fx.date_key       = fs.date_key
+      AND fx.base_currency  = 'USD'
+      AND fx.quote_currency = 'BRL';
+
+GRANT SELECT ON analytics.v_sales_usd TO powerbi_reader;
+
+COMMENT ON VIEW analytics.v_sales_usd IS
+    'Pre-joined sales + USD/BRL FX rate. usd_* columns are NULL on dates '
+    'outside Frankfurter''s trading-day coverage (weekends/holidays). '
+    'Created by 06_powerbi_readiness.sql; backs the "USD-normalised reporting" '
+    'business question.';
 
 
 -- =============================================================

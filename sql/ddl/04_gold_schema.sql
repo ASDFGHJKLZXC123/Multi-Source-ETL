@@ -111,16 +111,21 @@ COMMENT ON COLUMN analytics.dim_date._loaded_at IS
 -- never used at load time — Python assigns 1-based range keys explicitly.
 -- If incremental inserts are ever introduced, switch to INT PRIMARY KEY.
 CREATE TABLE IF NOT EXISTS analytics.dim_customer (
-    customer_key    SERIAL          PRIMARY KEY,
-    customer_id     INT             NOT NULL,
-    customer_code   VARCHAR(32)     NOT NULL,
-    zip_code_prefix VARCHAR(8),
-    city            VARCHAR(100),
-    state           CHAR(2),
-    is_active       BOOLEAN         NOT NULL DEFAULT TRUE,
-    _loaded_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    customer_key     SERIAL          PRIMARY KEY,
+    customer_id      INT             NOT NULL,
+    customer_code    VARCHAR(32)     NOT NULL,
+    zip_code_prefix  VARCHAR(8),
+    city             VARCHAR(100),
+    normalized_city  VARCHAR(100),
+    state            CHAR(2),
+    is_active        BOOLEAN         NOT NULL DEFAULT TRUE,
+    _loaded_at       TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_dim_customer_code UNIQUE (customer_code)
 );
+
+-- Migration: older DBs created before normalized_city was introduced still need
+-- the column. ADD COLUMN IF NOT EXISTS is a no-op when the column is already present.
+ALTER TABLE analytics.dim_customer ADD COLUMN IF NOT EXISTS normalized_city VARCHAR(100);
 
 COMMENT ON TABLE analytics.dim_customer IS
     'Customer dimension (SCD Type 1). One row per unique shopper. '
@@ -134,6 +139,9 @@ COMMENT ON COLUMN analytics.dim_customer.customer_code IS
     'Business key. Maps to olist customer_unique_id (one row per physical person).';
 COMMENT ON COLUMN analytics.dim_customer.zip_code_prefix IS
     'First 5 digits of the Brazilian CEP postal code.';
+COMMENT ON COLUMN analytics.dim_customer.normalized_city IS
+    'NFD-stripped, lowercase, trimmed city name. Matches the join key used by '
+    'analytics.fact_weather_daily so v_sales_with_weather can join without unaccent().';
 COMMENT ON COLUMN analytics.dim_customer.state IS
     'Two-letter Brazilian state abbreviation (e.g. SP, RJ, MG).';
 COMMENT ON COLUMN analytics.dim_customer.is_active IS

@@ -5,7 +5,6 @@ This module is the single source of truth for:
   - Bronze layer output paths (BRONZE_DB, BRONZE_API, BRONZE_MANUAL)
   - Retry / backoff policy (RetryConfig)
   - Ordered list of source-system tables to extract (BRONZE_DB_TABLES)
-  - Flat-file schema specs for validation (FLAT_FILE_SCHEMAS)
   - Utility helpers for file naming (timestamp_suffix, idempotency_key)
 
 Design constraints
@@ -107,25 +106,6 @@ BRONZE_DB_TABLES: Final[list[str]] = [
 
 
 # ---------------------------------------------------------------------------
-# Flat-file schema specifications
-# Only files actually validated against data/bronze/manual/ live here.
-# Olist CSVs are downloaded from Kaggle into data/bronze/olist/ by
-# src.setup.load_source_db; their column contracts live in that loader.
-# ---------------------------------------------------------------------------
-
-FLAT_FILE_SCHEMAS: Final[dict[str, list[str]]] = {
-    "municipios": [
-        "codigo_ibge",
-        "nome",
-        "latitude",
-        "longitude",
-        "capital",
-        "codigo_uf",
-    ],
-}
-
-
-# ---------------------------------------------------------------------------
 # File naming helpers
 # ---------------------------------------------------------------------------
 
@@ -196,7 +176,6 @@ __all__ = [
     "DEFAULT_RETRY",
     # Table / schema metadata
     "BRONZE_DB_TABLES",
-    "FLAT_FILE_SCHEMAS",
     # Helpers
     "timestamp_suffix",
     "idempotency_key",
