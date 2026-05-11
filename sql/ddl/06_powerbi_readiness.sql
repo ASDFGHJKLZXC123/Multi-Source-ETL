@@ -217,8 +217,10 @@ COMMENT ON VIEW analytics.v_sales_enriched IS
 --     normalized_city, state) because fact_weather_daily.city is
 --     NFD-stripped lowercase per src.transform.transform_weather;
 --     dim_customer.normalized_city is populated to match.
---     LEFT JOIN on weather preserves the ~5–8% of order-items in
---     cities without weather coverage (see Known Limitations).
+--     LEFT JOIN on weather preserves the order-items whose customer
+--     city is outside the top-20-by-order-volume Open-Meteo extract
+--     footprint (currently ~61% of fact_sales rows have NULL weather
+--     columns; see Known Limitations).
 -- =============================================================
 
 -- DROP first so we can change column ordering / add interior columns;
