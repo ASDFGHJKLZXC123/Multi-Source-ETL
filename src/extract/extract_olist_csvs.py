@@ -1,22 +1,21 @@
 """
-Stage 1c — snapshot the 4 raw Olist CSVs that are NOT modelled in source_system
-(payments, reviews, geolocation, category translation) into Bronze as Parquet.
+Stage 1c — snapshot the raw Olist CSVs that are NOT modelled in source_system
+(reviews, geolocation, category translation) into Bronze as Parquet.
 
 Why this exists
 ---------------
-The five Olist tables loaded into ``source_system`` (customers, stores, products,
-orders, order_items) are snapshotted to ``data/bronze/db/`` by
-``src.extract.extract_db``.  The remaining four files in the Kaggle bundle are
+The six Olist tables loaded into ``source_system`` (customers, stores, products,
+orders, order_items, payments) are snapshotted to ``data/bronze/db/<table>/`` by
+``src.extract.extract_db``. The remaining three files in the Kaggle bundle are
 not loaded into the relational source schema, but the README counts them in the
-"9 Olist tables" total.  This module gives them an identical Bronze landing so
+"9 Olist tables" total. This module gives them an identical Bronze landing so
 the count is honest and the raw files are part of the same pipeline lineage.
 
 Files snapshotted
 -----------------
-- ``olist_order_payments_dataset.csv``  → ``payments/snapshot.parquet``
-- ``olist_order_reviews_dataset.csv``   → ``reviews/snapshot.parquet``
-- ``olist_geolocation_dataset.csv``     → ``geolocation/snapshot.parquet``
-- ``product_category_name_translation.csv`` → ``category_translation/snapshot.parquet``
+- ``olist_order_reviews_dataset.csv``        → ``reviews/snapshot.parquet``
+- ``olist_geolocation_dataset.csv``          → ``geolocation/snapshot.parquet``
+- ``product_category_name_translation.csv``  → ``category_translation/snapshot.parquet``
 
 Idempotent: re-running overwrites the latest snapshot atomically.
 """
@@ -33,9 +32,10 @@ from src.utils.logger import logger
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _BRONZE_OLIST = _PROJECT_ROOT / "data" / "bronze" / "olist"
 
-# (csv_stem, bronze_subdir)
+# (csv_stem, bronze_subdir) — payments is now modelled via source_system,
+# so it is snapshotted by extract_db and removed from this list to avoid
+# two writers in data/bronze/db/payments/ (schema mismatch on read).
 _RAW_OLIST_SNAPSHOTS: list[tuple[str, str]] = [
-    ("olist_order_payments_dataset", "payments"),
     ("olist_order_reviews_dataset", "reviews"),
     ("olist_geolocation_dataset", "geolocation"),
     ("product_category_name_translation", "category_translation"),

@@ -416,12 +416,104 @@ def build_fact_fx_rates() -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# fact_payments
+# ---------------------------------------------------------------------------
+
+
+def build_fact_payments() -> pd.DataFrame:
+    """Build and write the order-payments fact (grain: order + payment_sequential).
+
+    Joins Silver payments to Silver orders (for date and customer FK
+    resolution), computes ``date_key`` from ``order_date``, left-merges
+    ``customer_key`` (via ``customer_id``) and ``currency_key`` (always BRL in
+    the source), runs RI checks (diagnostic only — no rows dropped), and
+    writes Gold.
+
+    Returns
+    -------
+    pd.DataFrame
+        The fact_payments DataFrame that was written to Gold.
+    """
+    logger.info("Building fact_payments from Silver payments + orders")
+
+    payments: pd.DataFrame = read_latest_silver("payments", "payments")
+    orders: pd.DataFrame = read_latest_silver("sales", "orders")
+
+    logger.info(
+        "fact_payments: {:,} payment rows, {:,} order rows",
+        len(payments),
+        len(orders),
+    )
+
+    orders_slim: pd.DataFrame = orders[
+        ["order_id", "order_code", "customer_id", "order_date", "currency_code"]
+    ].copy()
+
+    df: pd.DataFrame = payments.merge(orders_slim, on="order_id", how="inner")
+    logger.info(
+        "fact_payments: {:,} rows after inner-join on order_id",
+        len(df),
+    )
+
+    df["order_date"] = pd.to_datetime(df["order_date"])
+    df["date_key"] = df["order_date"].dt.strftime("%Y%m%d").astype(int)
+
+    dim_customer: pd.DataFrame = _load_dim_customer()
+    dim_currency: pd.DataFrame = _load_dim_currency()
+    dim_date: pd.DataFrame = _load_dim_date()
+
+    df = df.merge(dim_customer, on="customer_id", how="left")
+    df = df.merge(dim_currency, on="currency_code", how="left")
+
+    logger.info("fact_payments: surrogate key resolution complete")
+
+    check_referential_integrity(
+        fact_df=df,
+        dim_df=dim_date,
+        fact_fk_col="date_key",
+        dim_pk_col="date_key",
+        label="fact_payments.date_key → dim_date.date_key",
+    )
+    check_referential_integrity(
+        fact_df=df,
+        dim_df=dim_customer,
+        fact_fk_col="customer_key",
+        dim_pk_col="customer_key",
+        label="fact_payments.customer_key → dim_customer.customer_key",
+    )
+    check_referential_integrity(
+        fact_df=df,
+        dim_df=dim_currency,
+        fact_fk_col="currency_key",
+        dim_pk_col="currency_key",
+        label="fact_payments.currency_key → dim_currency.currency_key",
+    )
+
+    output_cols: list[str] = [
+        "order_id",
+        "order_code",
+        "payment_sequential",
+        "date_key",
+        "customer_key",
+        "currency_key",
+        "payment_type",
+        "payment_installments",
+        "payment_value",
+    ]
+    df = df[output_cols].reset_index(drop=True)
+
+    write_gold(df, "facts", "fact_payments")
+    logger.info("fact_payments complete: {:,} rows", len(df))
+    return df
+
+
+# ---------------------------------------------------------------------------
 # Orchestration entry point
 # ---------------------------------------------------------------------------
 
 
 def run() -> dict[str, pd.DataFrame]:
-    """Build all three Gold fact tables in dependency order.
+    """Build all four Gold fact tables in dependency order.
 
     Fact tables are built after all dimensions have been written by
     ``build_dimensions.run()``.  The order here is:
@@ -430,12 +522,12 @@ def run() -> dict[str, pd.DataFrame]:
                             dim_store, dim_currency)
     2. fact_weather_daily  (depends on dim_date)
     3. fact_fx_rates       (depends on dim_date, dim_currency)
+    4. fact_payments       (depends on dim_date, dim_customer, dim_currency)
 
     Returns
     -------
     dict[str, pd.DataFrame]
-        Mapping of fact name to the DataFrame written to Gold, e.g.
-        ``{"fact_sales": df_sales, "fact_weather_daily": df_weather, ...}``.
+        Mapping of fact name to the DataFrame written to Gold.
     """
     logger.info("=== Stage 4: Building Gold fact tables ===")
 
@@ -444,6 +536,7 @@ def run() -> dict[str, pd.DataFrame]:
     results["fact_sales"] = build_fact_sales()
     results["fact_weather_daily"] = build_fact_weather_daily()
     results["fact_fx_rates"] = build_fact_fx_rates()
+    results["fact_payments"] = build_fact_payments()
 
     # Summary log so operators can confirm row counts at a glance.
     summary_lines: list[str] = [f"  {name}: {len(df):,} rows" for name, df in results.items()]
@@ -480,5 +573,6 @@ __all__ = [
     "build_fact_sales",
     "build_fact_weather_daily",
     "build_fact_fx_rates",
+    "build_fact_payments",
     "run",
 ]

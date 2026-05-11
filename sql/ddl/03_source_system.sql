@@ -30,6 +30,7 @@
 --   3. source_system.products
 --   4. source_system.orders        (FK -> customers)
 --   5. source_system.order_items   (FK -> orders, products, stores)
+--   6. source_system.payments      (FK -> orders)
 -- =============================================================
 
 
@@ -264,6 +265,38 @@ COMMENT ON COLUMN source_system.order_items.ingested_at IS
     'Timestamp when this row was first loaded by the ETL pipeline. Set once; never updated.';
 
 
+-- ------------------------------------------------------------
+-- 6. source_system.payments
+--    Order payments. One row per (order_id, payment_sequential).
+--    Split payments (e.g. credit_card + voucher on the same order)
+--    produce multiple rows. Maps to olist_order_payments_dataset.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS source_system.payments (
+    payment_id           SERIAL          PRIMARY KEY,
+    order_id             INT             NOT NULL,
+    payment_sequential   SMALLINT        NOT NULL,
+    payment_type         VARCHAR(20)     NOT NULL,
+    payment_installments SMALLINT        NOT NULL,
+    payment_value        NUMERIC(12,2)   NOT NULL,
+    created_at           TIMESTAMP       NOT NULL DEFAULT NOW(),
+    ingested_at          TIMESTAMP       NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_payments_order_seq    UNIQUE (order_id, payment_sequential),
+    CONSTRAINT fk_payments_order        FOREIGN KEY (order_id)
+        REFERENCES source_system.orders (order_id)
+);
+
+COMMENT ON TABLE source_system.payments IS
+    'Order payments. One row per (order_id, payment_sequential). Split payments produce multiple rows.';
+COMMENT ON COLUMN source_system.payments.payment_sequential IS
+    'Sequence number for split payments within an order (1-based). Maps to olist_order_payments_dataset.payment_sequential.';
+COMMENT ON COLUMN source_system.payments.payment_type IS
+    'Payment instrument. Known values: credit_card, boleto, voucher, debit_card, not_defined.';
+COMMENT ON COLUMN source_system.payments.payment_installments IS
+    'Number of installments arranged with the issuer. 1 for lump-sum payments.';
+COMMENT ON COLUMN source_system.payments.payment_value IS
+    'Amount paid via this method in BRL. Sum across an order equals the total transaction value.';
+
+
 -- =============================================================
 -- INDEXES
 -- Placed after all CREATE TABLE statements to allow the planner
@@ -293,6 +326,10 @@ CREATE INDEX IF NOT EXISTS idx_src_orders_date_status ON source_system.orders (o
 CREATE INDEX IF NOT EXISTS idx_src_items_order_id   ON source_system.order_items (order_id);
 CREATE INDEX IF NOT EXISTS idx_src_items_product_id ON source_system.order_items (product_id);
 CREATE INDEX IF NOT EXISTS idx_src_items_store_id   ON source_system.order_items (store_id);
+
+-- payments
+CREATE INDEX IF NOT EXISTS idx_src_payments_order_id ON source_system.payments (order_id);
+CREATE INDEX IF NOT EXISTS idx_src_payments_type     ON source_system.payments (payment_type);
 
 
 -- =============================================================

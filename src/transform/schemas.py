@@ -41,6 +41,18 @@ VALID_ORDER_STATUSES: frozenset[str] = frozenset(
 # Note: 'canceled' is intentionally excluded; cancellations are filtered out
 # during the Bronze→Silver order transform before this schema is applied.
 
+VALID_PAYMENT_TYPES: frozenset[str] = frozenset(
+    {
+        "credit_card",
+        "boleto",
+        "voucher",
+        "debit_card",
+    }
+)
+# Note: 'not_defined' rows are filtered to quarantine during the Bronze→Silver
+# payments transform — these are missing-payment-method records, not a real
+# payment instrument.
+
 # ---------------------------------------------------------------------------
 # Silver: Orders
 # ---------------------------------------------------------------------------
@@ -274,6 +286,47 @@ SilverWeatherSchema = pa.DataFrameSchema(
 # Silver: FX Rates
 # ---------------------------------------------------------------------------
 
+SilverPaymentsSchema = pa.DataFrameSchema(
+    columns={
+        "order_id": pa.Column(
+            pa.Int,
+            nullable=False,
+            description="Foreign key to source_system.orders.order_id.",
+        ),
+        "payment_sequential": pa.Column(
+            pa.Int,
+            nullable=False,
+            checks=pa.Check.ge(1),
+            description="1-based sequence number for split payments within an order.",
+        ),
+        "payment_type": pa.Column(
+            pa.String,
+            nullable=False,
+            checks=pa.Check.isin(VALID_PAYMENT_TYPES),
+            description="Payment instrument (credit_card, boleto, voucher, debit_card).",
+        ),
+        "payment_installments": pa.Column(
+            pa.Int,
+            nullable=False,
+            checks=pa.Check.ge(0),
+            description="Number of installments arranged with the issuer.",
+        ),
+        "payment_value": pa.Column(
+            pa.Float,
+            nullable=False,
+            checks=pa.Check.gt(0),
+            description="Amount paid via this instrument in BRL. Strictly > 0.",
+        ),
+        "ingested_at": pa.Column(
+            pa.DateTime,
+            nullable=False,
+            description="Pipeline ingestion timestamp (set by the Bronze loader).",
+        ),
+    },
+    coerce=True,
+    name="SilverPayments",
+)
+
 SilverFxSchema = pa.DataFrameSchema(
     columns={
         "date": pa.Column(
@@ -423,9 +476,11 @@ def validate_silver(
 
 __all__ = [
     "VALID_ORDER_STATUSES",
+    "VALID_PAYMENT_TYPES",
     "SilverOrderSchema",
     "SilverOrderItemSchema",
     "SilverWeatherSchema",
     "SilverFxSchema",
+    "SilverPaymentsSchema",
     "validate_silver",
 ]

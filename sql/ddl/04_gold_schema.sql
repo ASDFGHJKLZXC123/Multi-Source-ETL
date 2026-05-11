@@ -389,7 +389,53 @@ COMMENT ON COLUMN analytics.fact_weather_daily._loaded_at IS
 
 
 -- ------------------------------------------------------------
--- 8. analytics.fact_fx_rates
+-- 8b. analytics.fact_payments
+--     Order-payment fact — one row per (order_id, payment_sequential).
+--     Split payments (credit_card + voucher on the same order) produce
+--     multiple rows.  FKs to dim_date (via order date), dim_customer
+--     (via the order), dim_currency (always BRL in current source).
+--     order_code is a degenerate dimension for source traceability.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS analytics.fact_payments (
+    order_id             INT             NOT NULL,
+    order_code           VARCHAR(32)     NOT NULL,
+    payment_sequential   SMALLINT        NOT NULL,
+    date_key             INT             NOT NULL,
+    customer_key         INT,            -- NULL when Silver customer_id has no dim_customer match
+    currency_key         INT,            -- NULL when Silver currency_code has no dim_currency match
+    payment_type         VARCHAR(20)     NOT NULL,
+    payment_installments SMALLINT        NOT NULL,
+    payment_value        NUMERIC(12,2)   NOT NULL,
+    _loaded_at           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (order_id, payment_sequential),
+    CONSTRAINT fk_fact_payments_date
+        FOREIGN KEY (date_key)     REFERENCES analytics.dim_date     (date_key),
+    CONSTRAINT fk_fact_payments_customer
+        FOREIGN KEY (customer_key) REFERENCES analytics.dim_customer (customer_key),
+    CONSTRAINT fk_fact_payments_currency
+        FOREIGN KEY (currency_key) REFERENCES analytics.dim_currency (currency_key)
+);
+
+COMMENT ON TABLE analytics.fact_payments IS
+    'Order payments fact. Grain: one row per (order_id, payment_sequential). '
+    'Split payments produce multiple rows. Measures: payment_value, payment_installments. '
+    'Currency is BRL in the Olist source; currency_key is included for future multi-currency support.';
+COMMENT ON COLUMN analytics.fact_payments.order_id IS
+    'Source-system order surrogate. Pairs with payment_sequential to form the natural PK.';
+COMMENT ON COLUMN analytics.fact_payments.order_code IS
+    'Degenerate dimension. Maps to olist_orders_dataset.order_id UUID.';
+COMMENT ON COLUMN analytics.fact_payments.payment_sequential IS
+    '1-based sequence number within an order. >1 indicates a split payment.';
+COMMENT ON COLUMN analytics.fact_payments.payment_type IS
+    'credit_card, boleto, voucher, or debit_card. not_defined rows are quarantined in Silver.';
+COMMENT ON COLUMN analytics.fact_payments.payment_installments IS
+    'Number of installments arranged with the issuer (1 for lump-sum).';
+COMMENT ON COLUMN analytics.fact_payments.payment_value IS
+    'Amount paid via this instrument in the order currency (always BRL today).';
+
+
+-- ------------------------------------------------------------
+-- 9. analytics.fact_fx_rates
 --    Daily foreign exchange rates keyed by date + currency pair.
 --    Sourced from the Frankfurter API via the Bronze FX extract
 --    and Silver FX transform stages.
@@ -463,6 +509,16 @@ CREATE INDEX IF NOT EXISTS idx_fact_weather_state
 --   WHERE city = ? AND state = ?  (used when joining to dim_customer/dim_store)
 CREATE INDEX IF NOT EXISTS idx_fact_weather_city_state
     ON analytics.fact_weather_daily (city, state);
+
+-- fact_payments — common dashboard filter dimensions
+CREATE INDEX IF NOT EXISTS idx_fact_payments_date_key
+    ON analytics.fact_payments (date_key);
+
+CREATE INDEX IF NOT EXISTS idx_fact_payments_customer_key
+    ON analytics.fact_payments (customer_key);
+
+CREATE INDEX IF NOT EXISTS idx_fact_payments_type
+    ON analytics.fact_payments (payment_type);
 
 -- fact_fx_rates — date-range rate lookups
 CREATE INDEX IF NOT EXISTS idx_fact_fx_rates_date_key

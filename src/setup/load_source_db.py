@@ -722,6 +722,82 @@ def load_order_items(
         raise
 
 
+def load_payments(order_lookup: dict[str, int]) -> int:
+    """Load order payments into source_system.payments with order FK resolution.
+
+    Olist's ``olist_order_payments_dataset.csv`` carries an ``order_id`` UUID
+    that matches ``olist_orders_dataset.order_id``. This function resolves that
+    UUID to the integer ``order_id`` FK in ``source_system.orders`` via
+    *order_lookup*, drops rows whose order cannot be resolved (logged as a
+    warning), and inserts the remainder.
+
+    Parameters
+    ----------
+    order_lookup : dict[str, int]
+        ``{order_code: order_id}`` returned by :func:`load_orders`.
+
+    Returns
+    -------
+    int
+        Number of rows successfully inserted (0 if the table was skipped).
+    """
+    engine = get_engine()
+
+    if _table_has_data(engine, "source_system", "payments"):
+        logger.info("source_system.payments already has data — skipping load.")
+        with engine.connect() as conn:
+            count = conn.execute(text("SELECT COUNT(*) FROM source_system.payments")).scalar()
+        return int(count or 0)
+
+    logger.info("--- Loading source_system.payments ---")
+    try:
+        raw = _read_csv("olist_order_payments_dataset")
+        log_data_quality_report(raw, "payments_raw")
+
+        df = raw.drop_duplicates(subset=["order_id", "payment_sequential"]).copy()
+        original_count = len(df)
+
+        df["order_id_int"] = df["order_id"].map(order_lookup)
+        miss_orders = df["order_id_int"].isna()
+        if miss_orders.sum():
+            sample = df.loc[miss_orders, "order_id"].head(5).tolist()
+            logger.warning(
+                "payments: {:,} rows reference unknown order_id — skipping. Sample: {}",
+                miss_orders.sum(),
+                sample,
+            )
+            df = df[~miss_orders].copy()
+
+        skipped = original_count - len(df)
+        if skipped:
+            logger.info(
+                "payments: {:,} rows skipped due to unresolved order FK ({:,} remaining)",
+                skipped,
+                len(df),
+            )
+
+        df["order_id"] = df["order_id_int"].astype(int)
+
+        keep = [
+            "order_id",
+            "payment_sequential",
+            "payment_type",
+            "payment_installments",
+            "payment_value",
+        ]
+        df = df[keep].copy()
+        df["created_at"] = pd.Timestamp.now()
+        df = _add_ingested_at(df)
+
+        _batch_insert(engine, df, "payments")
+        logger.info("Loaded {:,} rows into source_system.payments", len(df))
+        return len(df)
+
+    except Exception as exc:
+        logger.error("Failed to load source_system.payments: {}", exc)
+        raise
+
+
 # ---------------------------------------------------------------------------
 # Step 4 — Post-load validation
 # ---------------------------------------------------------------------------
@@ -743,6 +819,7 @@ def run_validation() -> None:
         "products": "SELECT COUNT(*) FROM source_system.products",
         "orders": "SELECT COUNT(*) FROM source_system.orders",
         "order_items": "SELECT COUNT(*) FROM source_system.order_items",
+        "payments": "SELECT COUNT(*) FROM source_system.payments",
     }
 
     integrity_queries: dict[str, str] = {
@@ -754,6 +831,11 @@ def run_validation() -> None:
         "order_items_missing_order_fk": (
             "SELECT COUNT(*) FROM source_system.order_items oi "
             "LEFT JOIN source_system.orders o ON oi.order_id = o.order_id "
+            "WHERE o.order_id IS NULL"
+        ),
+        "payments_missing_order_fk": (
+            "SELECT COUNT(*) FROM source_system.payments p "
+            "LEFT JOIN source_system.orders o ON p.order_id = o.order_id "
             "WHERE o.order_id IS NULL"
         ),
     }
@@ -826,6 +908,9 @@ def run() -> None:
 
     items_loaded = load_order_items(order_lookup, product_lookup, store_lookup)
     logger.info("order_items loaded: {:,} rows", items_loaded)
+
+    payments_loaded = load_payments(order_lookup)
+    logger.info("payments loaded: {:,} rows", payments_loaded)
 
     # Step 4 — Validation
     logger.info("Step 4/4 — Post-load validation")

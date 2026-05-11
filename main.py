@@ -74,7 +74,7 @@ def stage_extract() -> None:
 
     logger.info("--- Stage 1a: DB snapshot (source_system → Parquet) ---")
     db_results = extract_all_tables()
-    logger.info("DB tables extracted: {}/{}", len(db_results), 5)
+    logger.info("DB tables extracted: {}/{}", len(db_results), 6)
 
     logger.info("--- Stage 1b: API extraction (weather + FX) ---")
     api_results = extract_all_apis(
@@ -87,7 +87,7 @@ def stage_extract() -> None:
     for source, manifest in api_results.items():
         logger.info("  {} → status={}", source, manifest.get("status", "unknown"))
 
-    logger.info("--- Stage 1c: Raw Olist Bronze snapshots (payments/reviews/geo/translation) ---")
+    logger.info("--- Stage 1c: Raw Olist Bronze snapshots (reviews/geolocation/category_translation) ---")
     snapshot_raw_olist()
 
 
@@ -101,6 +101,7 @@ def stage_silver() -> None:
     from src.transform.transform_sales import run as run_sales
     from src.transform.transform_weather import run as run_weather
     from src.transform.transform_fx import run as run_fx
+    from src.transform.transform_payments import run as run_payments
 
     logger.info("--- Stage 3a: Sales Silver transform ---")
     run_sales()
@@ -110,6 +111,9 @@ def stage_silver() -> None:
 
     logger.info("--- Stage 3c: FX Silver transform ---")
     run_fx()
+
+    logger.info("--- Stage 3d: Payments Silver transform ---")
+    run_payments()
 
 
 def stage_gold() -> None:

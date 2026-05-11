@@ -104,6 +104,7 @@ BRONZE_DB_TABLES: Final[list[str]] = [
     "products",
     "orders",
     "order_items",
+    "payments",
 ]
 
 
