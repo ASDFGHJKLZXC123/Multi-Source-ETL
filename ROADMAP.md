@@ -1,6 +1,6 @@
 # Roadmap
 
-Remaining work to fully deliver the project. Updated **2026-05-11** at HEAD `271e280`.
+Remaining work to fully deliver the project. Updated **2026-05-12** at HEAD `5fd657f`.
 
 This file is session-sequenced — it describes *what to do next*, in order, with
 realistic effort estimates. For the conceptual feature list (what's missing,
@@ -32,8 +32,8 @@ unlock for heatmap and distance-based analytics.
 
 | Task | File |
 |---|---|
-| Decide dedup policy | Geolocation has many lat/lon per `zip_prefix` — typical: average or median per prefix |
-| `source_system.geolocation` DDL | `sql/ddl/03_source_system.sql` |
+| Dedup policy: **median** per `zip_prefix` (decided — see Decisions section) | — |
+| `source_system.geolocation` DDL (PK: `zip_prefix` post-dedup) | `sql/ddl/03_source_system.sql` |
 | `load_geolocation()` function | `src/setup/load_source_db.py` |
 | Add `"geolocation"` to `BRONZE_DB_TABLES` | `src/extract/config.py` |
 | Remove `"geolocation"` from `_RAW_OLIST_SNAPSHOTS` | `src/extract/extract_olist_csvs.py` |
@@ -53,8 +53,8 @@ CSVs drop 3 → 2.
 
 | Task | File |
 |---|---|
-| **Decide dedup policy** | Olist reviews have duplicate `review_id` rows — typical: keep last by `review_answer_timestamp` |
-| `source_system.reviews` DDL | `sql/ddl/03_source_system.sql` |
+| Dedup policy: **none — keep all rows; PK is a SERIAL `review_id_int`; uniqueness enforced on `(review_id, order_id)`** (decided — see Decisions section) | — |
+| `source_system.reviews` DDL (SERIAL PK + UNIQUE on `(review_id, order_id)`) | `sql/ddl/03_source_system.sql` |
 | `load_reviews()` function (with dedup) | `src/setup/load_source_db.py` |
 | Add `"reviews"` to `BRONZE_DB_TABLES` | `src/extract/config.py` |
 | Remove `"reviews"` from `_RAW_OLIST_SNAPSHOTS` | `src/extract/extract_olist_csvs.py` |
@@ -205,6 +205,29 @@ Captured here so a fresh reader (human or AI) doesn't re-litigate them.
   latter as you add to the former, or two writers will land in
   `data/bronze/db/<table>/` and Silver picks the wrong file. *(Bug hit at
   `b72742c` first attempt.)*
+- **Block 2 `dim_geolocation` dedup = median per `zip_prefix`.** The Olist
+  geolocation CSV has ~1,000,163 rows for ~19,015 unique zip prefixes, with
+  some prefixes (e.g. `57319`) carrying outlier coordinates that span
+  ~3,251 km between min/max latitude. Mean is pulled by these outliers;
+  median is robust. Implementation: in the Silver transform, do
+  `df.groupby('zip_code_prefix').agg({'latitude':'median','longitude':'median'})`,
+  then load to `source_system.geolocation` with `zip_prefix` as PK. Refer to
+  the documented many-to-one issue in `docs/source_schema.md:390`.
+  *(Decided 2026-05-12 via codex consultation; agreed with codex's
+  recommendation.)*
+- **Block 3 `fact_reviews` dedup = none; preserve all rows.** The 789
+  duplicate `review_id` values in the source (1,603 duplicate rows total)
+  are NOT competing versions of the same review — they are the SAME review
+  attached to MULTIPLE orders. A sampled duplicate (`c444278…`) appears on
+  3 orders with identical `review_score=5` and identical
+  `review_answer_timestamp`, only `order_id` differs. Dropping duplicates
+  by any heuristic (last by timestamp, first, highest score) would
+  arbitrarily lose valid order-review associations. Decision: use a
+  SERIAL surrogate PK in `source_system.reviews`, enforce `UNIQUE (review_id,
+  order_id)` instead of `UNIQUE (review_id)`. The "review_id is unreliable
+  as a primary key" caveat in `docs/source_schema.md:377-385` is consistent
+  with this choice. *(Decided 2026-05-12 via codex consultation; agreed
+  with codex's recommendation.)*
 
 ### Accepted caveats (intentionally left for later)
 These are flagged behind banners; do **not** re-fix unless explicitly asked.
