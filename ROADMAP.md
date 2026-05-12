@@ -1,0 +1,165 @@
+# Roadmap
+
+Remaining work to fully deliver the project. Updated **2026-05-11** at HEAD `b19b963`.
+
+This file is session-sequenced — it describes *what to do next*, in order, with
+realistic effort estimates. For the conceptual feature list (what's missing,
+why it matters), see the **Future Improvements** section in `README.md`.
+
+---
+
+## Block 1 — Close `fact_payments` (Phase 4) — ~30 min
+
+The data is already in Gold Parquet at `data/gold/facts/fact_payments.parquet`;
+this block lands it in the warehouse and finishes the documentation.
+
+| Task | File |
+|---|---|
+| Add warehouse loader entry | `src/load/load_to_warehouse.py:59-63` (`_FACT_TABLES`) — `("fact_payments", "fact_payments", ["order_id", "payment_sequential"])` |
+| Add 5 quality checks | `src/quality/checks.py` — row_count threshold, no-nulls on PK + `payment_value`, uniqueness on `(order_id, payment_sequential)`, range `payment_value > 0`, RI on `date_key → dim_date`. Also add `fact_payments` to `_ANALYTICS_TABLES` allowlist. |
+| Add unit tests (~4) | `tests/test_schemas.py`, `tests/test_transform_functions.py` |
+| README sync | Move `fact_payments` from Roadmap → Delivered; bump test counts 95→99 / 98→102; drop the "loader pending" caveats across `README.md`, `main.py`, `load_to_warehouse.py`, SQL DDL headers, `stage_warehouse` docstring |
+| Verify | `make init` + `make full-refresh` + smoke `SELECT * FROM analytics.fact_payments LIMIT 5` |
+
+**Blocked by:** nothing. **Highest-leverage next session.**
+
+---
+
+## Block 2 — `dim_geolocation` — ~3 hr
+
+Adds lat/lon enrichment to `dim_customer` and `dim_store`. Biggest visual
+unlock for heatmap and distance-based analytics.
+
+| Task | File |
+|---|---|
+| Decide dedup policy | Geolocation has many lat/lon per `zip_prefix` — typical: average or median per prefix |
+| `source_system.geolocation` DDL | `sql/ddl/03_source_system.sql` |
+| `load_geolocation()` function | `src/setup/load_source_db.py` |
+| Add `"geolocation"` to `BRONZE_DB_TABLES` | `src/extract/config.py` |
+| Remove `"geolocation"` from `_RAW_OLIST_SNAPSHOTS` | `src/extract/extract_olist_csvs.py` |
+| `SilverGeolocationSchema` | `src/transform/schemas.py` |
+| Silver transform (with dedup) | new `src/transform/transform_geolocation.py` |
+| Enrich `dim_customer` + `dim_store` | `src/transform/build_dimensions.py` — add `latitude` / `longitude` via zip_prefix join |
+| Add lat/lon to dim DDL | `sql/ddl/04_gold_schema.sql` (with `ALTER TABLE … ADD COLUMN IF NOT EXISTS` for existing DBs) |
+| Tests | unit tests for schema + transform |
+| README | drop `dim_geolocation` from Roadmap; mention lat/lon in dim_customer/dim_store; remove the "no heatmap" caveat |
+
+**Blocked by:** nothing. After this, `BRONZE_DB_TABLES` is 6 → 7; unmodelled
+CSVs drop 3 → 2.
+
+---
+
+## Block 3 — `fact_reviews` — ~4 hr
+
+| Task | File |
+|---|---|
+| **Decide dedup policy** | Olist reviews have duplicate `review_id` rows — typical: keep last by `review_answer_timestamp` |
+| `source_system.reviews` DDL | `sql/ddl/03_source_system.sql` |
+| `load_reviews()` function (with dedup) | `src/setup/load_source_db.py` |
+| Add `"reviews"` to `BRONZE_DB_TABLES` | `src/extract/config.py` |
+| Remove `"reviews"` from `_RAW_OLIST_SNAPSHOTS` | `src/extract/extract_olist_csvs.py` |
+| `SilverReviewsSchema` | `src/transform/schemas.py` |
+| Silver transform | new `src/transform/transform_reviews.py` |
+| Gold fact builder | `src/transform/build_facts.py` (`build_fact_reviews`) |
+| `analytics.fact_reviews` DDL | `sql/ddl/04_gold_schema.sql` |
+| Warehouse loader entry | `src/load/load_to_warehouse.py` |
+| 5 quality checks | `src/quality/checks.py` |
+| Unit tests | `tests/test_schemas.py`, `tests/test_transform_functions.py` |
+| README | move `fact_reviews` from Roadmap to Delivered; remove "review data is Bronze-only" Known Limitation; restore BQ5 satisfaction question; bump test counts |
+
+**Blocked by:** dedup policy decision. After this, unmodelled CSVs drop to 1
+(`category_translation`) — fold that in too (~30 min) and Bronze is fully
+modelled.
+
+---
+
+## Block 4 — Author the `.pbix` — ~1–2 days
+
+Requires a Windows VM (Power BI Desktop is Windows-only).
+
+| Task | Where |
+|---|---|
+| Set up Parallels VM with Windows 11 | macOS host |
+| Install Power BI Desktop + Npgsql driver | Inside VM |
+| Confirm `host.docker.internal:5433` reachable | Per `docs/powerbi_vm_workflow.md` |
+| Set `powerbi_reader` password | `ALTER ROLE powerbi_reader WITH PASSWORD '…'` via psql — replaces the literal placeholder in `sql/ddl/06_powerbi_readiness.sql:65` |
+| Build semantic model | Per `docs/POWER_BI_SEMANTIC_MODEL_DESIGN.md` — Import mode, role-playing currency, calendar marked |
+| Implement 27 DAX measures | Per `docs/stage9_dax_measures.md` |
+| Build 4 pages | Per `docs/stage10_dashboard_pages.md` |
+| Export PNG screenshots | To `docs/screenshots/01_executive_overview.png` etc. |
+| Save `.pbix` | To `pbix/multi_source_etl.pbix` (git-ignored) |
+
+**Blocked by:** Windows VM access.
+
+---
+
+## Block 5 — Documentation final pass — ~1 hr
+
+Runs **after Block 4**, so doc claims match the actual delivered state.
+
+| Task | Where |
+|---|---|
+| Drop "(designed)" qualifier from Skills row | `README.md:464` |
+| Remove "partially stale" banners from PBI docs | `docs/stage8/9/10_*.md`, `docs/POWER_BI_SEMANTIC_MODEL_DESIGN.md` |
+| Replace inline EUR-base FX cross-rate DAX with direct USD/BRL | Same 4 docs |
+| Update PBI placeholder row counts (500K/20K) → real (~112,650) | `docs/POWER_BI_SEMANTIC_MODEL_DESIGN.md:64-65, 498, 747-748` |
+| Remove review-score aspirational sections | Same doc (after Block 3 lands) |
+| Update README headline to fully-delivered state | E.g. "5 dims + 4 facts in PostgreSQL; 4-page Power BI dashboard delivered" |
+
+---
+
+## Block 6 — Final codex audit + commit — ~30 min
+
+One last codex sweep to catch ripple drift, fix anything outstanding, push the
+final commit. Session pattern has been that every commit creates small ripple
+drift — expect ~3–5 items to fix in this pass.
+
+---
+
+## Dependency graph
+
+```
+Block 1 (fact_payments Phase 4) ─┐
+                                 ├─→ Block 5 (doc final pass) ─→ Block 6 (final audit)
+Block 2 (dim_geolocation)     ───┤
+                                 │
+Block 3 (fact_reviews)        ───┤
+                                 │
+Block 4 (.pbix authoring) ────────┘
+```
+
+Blocks 1–3 are independent and can be done in any order. Block 4 can run in
+parallel inside the VM if you have it. Block 5 depends on Block 4 (so doc
+claims match reality). Block 6 closes everything.
+
+---
+
+## Realistic session sequencing
+
+| Session | Block | Time |
+|---|---|---|
+| Next | Block 1 — close `fact_payments` | 30 min |
+| Following | Block 2 — `dim_geolocation` (heatmap capability) | 3 hr |
+| Following | Block 3 — `fact_reviews` (satisfaction analytics) | 4 hr |
+| Following | Block 4 — `.pbix` authoring (Windows VM) | 1–2 days |
+| Final | Block 5 + 6 — doc cleanup + codex audit | 1.5 hr |
+
+**Total ~3 working days** to a fully-delivered portfolio project. Without
+Block 4 (the `.pbix`), it's ~7.5 hours of code work — but the `.pbix` is the
+headline portfolio artifact, so skipping it leaves the biggest credibility gap.
+
+---
+
+## What to do next
+
+**If you have 30 minutes:** Block 1. Closes a started feature, biggest README
+cleanup, fast wins.
+
+**If you have 3 hours:** Block 1 + Block 2. Heatmap-ready dim_customer +
+dim_store enables a meaningfully different dashboard.
+
+**If you have a full day:** Block 1 + 2 + 3. Bronze becomes fully modelled
+(if you also fold in `category_translation`); README's "Roadmap" section
+becomes nearly empty.
+
+**If you have a Windows VM and a weekend:** Block 4. The headline payoff.
