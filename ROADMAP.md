@@ -163,3 +163,67 @@ dim_store enables a meaningfully different dashboard.
 becomes nearly empty.
 
 **If you have a Windows VM and a weekend:** Block 4. The headline payoff.
+
+---
+
+## Decisions & accepted caveats
+
+Captured here so a fresh reader (human or AI) doesn't re-litigate them.
+
+### Design decisions (load-bearing)
+- **`fact_payments` grain** = one row per `(order_code, payment_sequential)`.
+  Preserves split-payment detail (~3% of orders pay via multiple instruments,
+  max 27 payments on one order). Aggregations to per-order grain happen
+  downstream in DAX/SQL. *(Decided 2026-05-11, commit `b72742c`.)*
+- **`dim_customer.normalized_city`** = NFD-stripped lowercase, computed at
+  Gold-build time via `src/utils/validators.normalize_city_name`. Chosen
+  over a Postgres `unaccent` extension because (a) avoids extension
+  dependency, (b) the same normalization is already applied to
+  `fact_weather_daily.city` in the Silver weather transform, so the join is
+  exact. *(Decided round-2 D1.)*
+- **`v_sales_with_weather`** uses `LEFT JOIN dim_customer` (not INNER) since
+  `fact_sales.customer_key` is nullable per `04_gold_schema.sql:269`. INNER
+  JOIN silently drops null-FK sales rows. *(Bug found by codex round-3 at
+  `d81b817`.)*
+- **`v_sales_usd`** filters `base_currency='USD' AND quote_currency='BRL'`
+  inside the `ON` clause, not `WHERE`. Predicates in `WHERE` would collapse
+  the `LEFT JOIN` to inner and drop sales rows on dates outside Frankfurter's
+  trading-day coverage. *(Codex round-2 catch.)*
+- **`fact_sales` line-item grain stays single-currency (BRL)** —
+  `v_sales_enriched` joins to 4 of 5 dimensions; `dim_currency` is omitted
+  because all Olist data is BRL today. Use `v_sales_usd` for USD reporting.
+- **Bronze schema mismatch isolation:** `BRONZE_DB_TABLES` (in
+  `src/extract/config.py`) and `_RAW_OLIST_SNAPSHOTS` (in
+  `src/extract/extract_olist_csvs.py`) are mutually exclusive. When a table
+  moves from "raw snapshot" to "modelled in `source_system`", remove from the
+  latter as you add to the former, or two writers will land in
+  `data/bronze/db/<table>/` and Silver picks the wrong file. *(Bug hit at
+  `b72742c` first attempt.)*
+
+### Accepted caveats (intentionally left for later)
+These are flagged behind banners; do **not** re-fix unless explicitly asked.
+
+- **Inline FX cross-rate text** in `docs/stage8_powerbi.md`,
+  `docs/stage9_dax_measures.md`, `docs/stage10_dashboard_pages.md`,
+  `docs/POWER_BI_SEMANTIC_MODEL_DESIGN.md`. The pipeline now fetches direct
+  USD/BRL (`extract_fx.py`); the docs were written when only EUR-base pairs
+  were available. Top-of-file banners point readers to `v_sales_usd`.
+  Rewriting the inline DAX is Block 5 work.
+- **PBI placeholder row-count estimates** (500K / 20K) in
+  `docs/POWER_BI_SEMANTIC_MODEL_DESIGN.md:64-65, 498, 747-748` vs reality
+  (~112,650 sales rows). Same situation — banner'd, deferred to Block 5.
+- **Review-score DAX measures** in `POWER_BI_SEMANTIC_MODEL_DESIGN.md`. Banner
+  marks them aspirational; will become real once Block 3 (`fact_reviews`)
+  lands.
+- **Weather coverage ~61% miss.** By design — Open-Meteo extractor pulls only
+  the top 20 cities by order volume. Raising `WEATHER_CITY_COUNT` in `.env`
+  and re-extracting closes the gap; not a bug.
+
+### Codex audit cadence
+This project has gone through 6 codex audit rounds in one session. Every
+significant code commit produces ~5–20 ripple drift sites elsewhere (other
+docs, docstrings, SQL header comments). Default cadence: run codex after
+each major feature commit, then triage findings before applying. See
+`feedback_review_rigor.md` (memory) for the "verify findings against source
+before applying" rule.
+
