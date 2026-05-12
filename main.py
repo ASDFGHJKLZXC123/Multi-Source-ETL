@@ -87,7 +87,9 @@ def stage_extract() -> None:
     for source, manifest in api_results.items():
         logger.info("  {} → status={}", source, manifest.get("status", "unknown"))
 
-    logger.info("--- Stage 1c: Raw Olist Bronze snapshots (reviews/geolocation/category_translation) ---")
+    logger.info(
+        "--- Stage 1c: Raw Olist Bronze snapshots (reviews/geolocation/category_translation) ---"
+    )
     snapshot_raw_olist()
 
 
