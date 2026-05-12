@@ -1,6 +1,6 @@
 # Roadmap
 
-Remaining work to fully deliver the project. Updated **2026-05-11** at HEAD `b19b963`.
+Remaining work to fully deliver the project. Updated **2026-05-11** at HEAD `271e280`.
 
 This file is session-sequenced — it describes *what to do next*, in order, with
 realistic effort estimates. For the conceptual feature list (what's missing,
@@ -171,20 +171,26 @@ becomes nearly empty.
 Captured here so a fresh reader (human or AI) doesn't re-litigate them.
 
 ### Design decisions (load-bearing)
-- **`fact_payments` grain** = one row per `(order_code, payment_sequential)`.
-  Preserves split-payment detail (~3% of orders pay via multiple instruments,
-  max 27 payments on one order). Aggregations to per-order grain happen
-  downstream in DAX/SQL. *(Decided 2026-05-11, commit `b72742c`.)*
+- **`fact_payments` grain** = one row per `(order_id, payment_sequential)`,
+  with `order_code` carried as a degenerate dimension for source
+  traceability. Preserves split-payment detail (~3% of orders pay via
+  multiple instruments, max 27 payments on one order). Aggregations to
+  per-order grain happen downstream in DAX/SQL. *(Decided 2026-05-11,
+  commit `b72742c`; PK at `sql/ddl/04_gold_schema.sql:402-413`.)*
 - **`dim_customer.normalized_city`** = NFD-stripped lowercase, computed at
   Gold-build time via `src/utils/validators.normalize_city_name`. Chosen
   over a Postgres `unaccent` extension because (a) avoids extension
-  dependency, (b) the same normalization is already applied to
-  `fact_weather_daily.city` in the Silver weather transform, so the join is
-  exact. *(Decided round-2 D1.)*
+  dependency, (b) Open-Meteo's `DEFAULT_CITIES` list at
+  `src/extract/extract_weather.py:58-79` is already accent-free at extract
+  time (e.g. `sao_paulo`, not `São Paulo`), so applying NFD-strip + lower
+  to `dim_customer.city` produces an exact match against
+  `fact_weather_daily.city`. Note: Silver weather transform lowercases /
+  trims but does NOT strip accents — accent-freeness comes from the
+  upstream city list. *(Decided round-2 D1.)*
 - **`v_sales_with_weather`** uses `LEFT JOIN dim_customer` (not INNER) since
-  `fact_sales.customer_key` is nullable per `04_gold_schema.sql:269`. INNER
-  JOIN silently drops null-FK sales rows. *(Bug found by codex round-3 at
-  `d81b817`.)*
+  `fact_sales.customer_key` is nullable per `sql/ddl/04_gold_schema.sql:274-281`.
+  INNER JOIN silently drops null-FK sales rows. *(Bug found by codex
+  round-3 at `d81b817`.)*
 - **`v_sales_usd`** filters `base_currency='USD' AND quote_currency='BRL'`
   inside the `ON` clause, not `WHERE`. Predicates in `WHERE` would collapse
   the `LEFT JOIN` to inner and drop sales rows on dates outside Frankfurter's
