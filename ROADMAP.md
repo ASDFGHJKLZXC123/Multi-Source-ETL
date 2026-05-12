@@ -38,7 +38,7 @@ unlock for heatmap and distance-based analytics.
 | Add `"geolocation"` to `BRONZE_DB_TABLES` | `src/extract/config.py` |
 | Remove `"geolocation"` from `_RAW_OLIST_SNAPSHOTS` | `src/extract/extract_olist_csvs.py` |
 | `SilverGeolocationSchema` | `src/transform/schemas.py` |
-| Silver transform (with dedup) | new `src/transform/transform_geolocation.py` |
+| Silver transform — `groupby('zip_code_prefix').agg({lat: 'median', lon: 'median'})` per the decided policy | new `src/transform/transform_geolocation.py` |
 | Enrich `dim_customer` + `dim_store` | `src/transform/build_dimensions.py` — add `latitude` / `longitude` via zip_prefix join |
 | Add lat/lon to dim DDL | `sql/ddl/04_gold_schema.sql` (with `ALTER TABLE … ADD COLUMN IF NOT EXISTS` for existing DBs) |
 | Tests | unit tests for schema + transform |
@@ -55,7 +55,7 @@ CSVs drop 3 → 2.
 |---|---|
 | Dedup policy: **none — keep all rows; PK is a SERIAL `review_id_int`; uniqueness enforced on `(review_id, order_id)`** (decided — see Decisions section) | — |
 | `source_system.reviews` DDL (SERIAL PK + UNIQUE on `(review_id, order_id)`) | `sql/ddl/03_source_system.sql` |
-| `load_reviews()` function (with dedup) | `src/setup/load_source_db.py` |
+| `load_reviews()` function (no dedup; UNIQUE on `(review_id, order_id)` per the decided policy) | `src/setup/load_source_db.py` |
 | Add `"reviews"` to `BRONZE_DB_TABLES` | `src/extract/config.py` |
 | Remove `"reviews"` from `_RAW_OLIST_SNAPSHOTS` | `src/extract/extract_olist_csvs.py` |
 | `SilverReviewsSchema` | `src/transform/schemas.py` |
@@ -67,9 +67,9 @@ CSVs drop 3 → 2.
 | Unit tests | `tests/test_schemas.py`, `tests/test_transform_functions.py` |
 | README | move `fact_reviews` from Roadmap to Delivered; remove "review data is Bronze-only" Known Limitation; restore BQ5 satisfaction question; bump test counts |
 
-**Blocked by:** dedup policy decision. After this, unmodelled CSVs drop to 1
-(`category_translation`) — fold that in too (~30 min) and Bronze is fully
-modelled.
+**Blocked by:** nothing (dedup policy locked in 2026-05-12 — see Decisions
+section). After this, unmodelled CSVs drop to 1 (`category_translation`) —
+fold that in too (~30 min) and Bronze is fully modelled.
 
 ---
 
